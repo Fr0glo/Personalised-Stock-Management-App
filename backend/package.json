@@ -1,0 +1,23 @@
+{
+  "name": "stock-management-backend",
+  "version": "1.0.0",
+  "description": "Backend for Stock Management System",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "init-db": "node database/init.js",
+    "cleanup-db": "node database/cleanup.js",
+    "reset-db": "node database/reset.js",
+    "import-data": "node database/import.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+} 
