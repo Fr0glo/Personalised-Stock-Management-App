@@ -7,8 +7,11 @@ import { dirname } from 'path';
 import userRoutes from './routes/users.js';
 import workerRoutes from './routes/workers.js';
 import stockItemRoutes from './routes/stockItems.js';
+import productCatalogRoutes from './routes/productCatalog.js';
 import entryVoucherRoutes from './routes/entryVouchers.js';
 import exitVoucherRoutes from './routes/exitVouchers.js';
+import entryVoucherDetailsRoutes from './routes/entryVoucherDetails.js';
+import exitVoucherDetailsRoutes from './routes/exitVoucherDetails.js';
 import auditLogRoutes from './routes/auditLogs.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,8 +29,11 @@ app.use(express.urlencoded({ extended: true }));  // Parse form data
 app.use('/api/users', userRoutes);
 app.use('/api/workers', workerRoutes);
 app.use('/api/stock-items', stockItemRoutes);
+app.use('/api/product-catalog', productCatalogRoutes);
 app.use('/api/entry-vouchers', entryVoucherRoutes);
 app.use('/api/exit-vouchers', exitVoucherRoutes);
+app.use('/api/entry-vouchers/details', entryVoucherDetailsRoutes);
+app.use('/api/exit-vouchers/details', exitVoucherDetailsRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 
 // Health check endpoint

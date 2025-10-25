@@ -52,42 +52,22 @@ router.get('/:id', async (req, res) => {
 // POST create new entry voucher
 router.post('/', async (req, res) => {
   try {
-    const { added_by, details } = req.body;
+    const { voucher_number, date, handled_by, taken_by, notes } = req.body;
     
-    if (!added_by || !details || !Array.isArray(details)) {
-      return res.status(400).json({ error: 'Added by and details array are required' });
+    if (!handled_by) {
+      return res.status(400).json({ error: 'Handled by is required' });
     }
     
     // Create entry voucher
     const voucherResult = await runQuery(
-      'INSERT INTO entryVouchers (added_by) VALUES (?)',
-      [added_by]
+      'INSERT INTO entryVouchers (voucher_number, date, handled_by, taken_by, notes, added_by) VALUES (?, ?, ?, ?, ?, ?)',
+      [voucher_number, date, handled_by, taken_by, notes, 1] // Using user_id = 1 as default
     );
     
-    const entryId = voucherResult.id;
-    
-    // Add details
-    for (const detail of details) {
-      const { item_id, worker_id, quantity } = detail;
-      
-      if (!item_id || !worker_id || !quantity) {
-        return res.status(400).json({ error: 'Item ID, worker ID, and quantity are required for each detail' });
-      }
-      
-      await runQuery(
-        'INSERT INTO entryDetails (entry_id, item_id, worker_id, quantity) VALUES (?, ?, ?, ?)',
-        [entryId, item_id, worker_id, quantity]
-      );
-      
-      // Update stock quantity
-      await runQuery(
-        'UPDATE stockItems SET quantity = quantity + ? WHERE item_id = ?',
-        [quantity, item_id]
-      );
-    }
-    
-    const createdVoucher = await getRow('SELECT * FROM entryVouchers WHERE entry_id = ?', [entryId]);
-    res.status(201).json(createdVoucher);
+    res.status(201).json({ 
+      voucher_id: voucherResult.id, 
+      message: 'Entry voucher created successfully' 
+    });
   } catch (error) {
     console.error('Error creating entry voucher:', error);
     res.status(500).json({ error: 'Failed to create entry voucher' });

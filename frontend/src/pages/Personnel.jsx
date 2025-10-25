@@ -37,7 +37,7 @@ const Personnel = () => {
 
   const fetchWorkerVouchers = async (workerId) => {
     try {
-      // Fetch entry vouchers for this worker
+      // Fetch entry vouchers
       const entryResponse = await fetch('http://localhost:5000/api/entry-vouchers');
       const exitResponse = await fetch('http://localhost:5000/api/exit-vouchers');
       
@@ -45,35 +45,19 @@ const Personnel = () => {
         const entryVouchers = await entryResponse.json();
         const exitVouchers = await exitResponse.json();
         
-        // Get details for all vouchers to find ones with this worker
-        const allVouchers = [...entryVouchers, ...exitVouchers];
-        const workerVouchersList = [];
+        // Combine all vouchers with their type
+        const allVouchers = [
+          ...entryVouchers.map(v => ({ ...v, type: 'entry' })),
+          ...exitVouchers.map(v => ({ ...v, type: 'exit' }))
+        ];
         
-        for (const voucher of allVouchers) {
-          const type = voucher.entry_id ? 'entry' : 'exit';
-          const id = voucher.entry_id || voucher.exit_id;
-          
-          try {
-            const detailsResponse = await fetch(`http://localhost:5000/api/${type}-vouchers/${id}`);
-            if (detailsResponse.ok) {
-              const details = await detailsResponse.json();
-              
-              // Check if this worker is in the voucher details
-              const workerInVoucher = details.details?.find(detail => detail.worker_id === workerId);
-              
-              if (workerInVoucher) {
-                workerVouchersList.push({
-                  ...voucher,
-                  type,
-                  workerDetail: workerInVoucher,
-                  voucherDetails: details
-                });
-              }
-            }
-          } catch (err) {
-            console.error(`Error fetching details for ${type} voucher ${id}:`, err);
-          }
-        }
+        // Filter vouchers that have this worker involved
+        const workerVouchersList = allVouchers.filter(voucher => {
+          // Check if this worker is mentioned in the voucher fields
+          return voucher.handled_by === workerId || 
+                 voucher.taken_by === workerId ||
+                 voucher.worker_who_changed === workerId;
+        });
         
         setWorkerVouchers(workerVouchersList);
       }
@@ -308,7 +292,7 @@ const Personnel = () => {
                             </div>
                             <div>
                               <h4 className="font-medium text-slate-800">
-                                Bon {voucher.type === 'entry' ? 'd\'Entrée' : 'de Sortie'} #{voucher.entry_id || voucher.exit_id}
+                                Bon {voucher.type === 'entry' ? 'd\'Entrée' : 'de Sortie'} #{voucher.voucher_number || voucher.entry_id || voucher.exit_id}
                               </h4>
                               <p className="text-sm text-slate-600">
                                 {formatDate(voucher.date)}
@@ -317,20 +301,31 @@ const Personnel = () => {
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                           <div>
-                            <span className="text-slate-600">Article:</span>
-                            <p className="font-medium">{voucher.workerDetail.item_name}</p>
+                            <span className="text-slate-600">Géré par:</span>
+                            <p className="font-medium">{voucher.handled_by || 'Non spécifié'}</p>
                           </div>
-                          <div>
-                            <span className="text-slate-600">Quantité:</span>
-                            <p className="font-medium">{voucher.workerDetail.quantity}</p>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Type:</span>
-                            <p className="font-medium">{voucher.type === 'entry' ? 'Entrée' : 'Sortie'}</p>
-                          </div>
+                          {voucher.type === 'entry' && (
+                            <div>
+                              <span className="text-slate-600">Pris par:</span>
+                              <p className="font-medium">{voucher.taken_by || 'Non spécifié'}</p>
+                            </div>
+                          )}
+                          {voucher.type === 'exit' && (
+                            <div>
+                              <span className="text-slate-600">Pris par:</span>
+                              <p className="font-medium">{voucher.taken_by || 'Non spécifié'}</p>
+                            </div>
+                          )}
                         </div>
+                        
+                        {voucher.notes && (
+                          <div className="mt-3">
+                            <span className="text-slate-600">Notes:</span>
+                            <p className="font-medium text-sm">{voucher.notes}</p>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
