@@ -7,6 +7,8 @@ import Orders from './pages/Orders';
 import Vouchers from './pages/Vouchers';
 import Personnel from './pages/Personnel';
 import Security from './pages/Security';
+import BonEntree from './pages/BonEntree';
+import BonSortie from './pages/BonSortie';
 
 function App() {
   return (
@@ -26,6 +28,8 @@ function App() {
               <Route path="/orders" element={<Orders />} />
               <Route path="/vouchers" element={<Vouchers />} />
               <Route path="/personnel" element={<Personnel />} />
+              <Route path="/bon-entree" element={<BonEntree />} />
+              <Route path="/bon-sortie" element={<BonSortie />} />
             </Routes>
           </Layout>
         } />

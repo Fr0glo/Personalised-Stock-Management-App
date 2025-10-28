@@ -1,185 +1,137 @@
-import sqlite3 from 'sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import fs from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import sqlite3 from 'sqlite3';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Database connection
 const dbPath = join(__dirname, 'stock_management.db');
 const db = new sqlite3.Database(dbPath);
 
-// Import from CSV file
-const importFromCSV = (filePath, tableName) => {
+// Import products.csv with headers: id, title, default price, default unite
+const importProductsFromCSV = (filePath) => {
   return new Promise((resolve, reject) => {
-    if (!fs.existsSync(filePath)) {
-      reject(new Error(`File not found: ${filePath}`));
-      return;
-    }
-
-    const csvData = fs.readFileSync(filePath, 'utf8');
-    const lines = csvData.split('\n').filter(line => line.trim());
-    const headers = lines[0].split(',').map(h => h.trim());
-    
-    console.log(`📁 Importing ${lines.length - 1} records to ${tableName}`);
-    console.log(`📋 Headers: ${headers.join(', ')}`);
-
-    // Skip header row
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim());
-      
-      if (values.length === headers.length) {
-        const placeholders = headers.map(() => '?').join(', ');
-        const query = `INSERT INTO ${tableName} (${headers.join(', ')}) VALUES (${placeholders})`;
-        
-        db.run(query, values, function(err) {
-          if (err) {
-            console.error(`❌ Error importing row ${i}:`, err.message);
-          }
-        });
+    try {
+      if (!fs.existsSync(filePath)) {
+        console.log('⚠️  products.csv not found:', filePath);
+        return resolve();
       }
-    }
 
-    console.log(`✅ Import completed for ${tableName}`);
-    resolve();
-  });
-};
+      console.log('📦 Importing products.csv → stockItems ...');
+      const csvData = fs.readFileSync(filePath, 'utf8');
+      const lines = csvData.split('\n').filter(line => line.trim());
+      if (lines.length < 2) {
+        console.log('⚠️  products.csv has no data');
+        return resolve();
+      }
 
-// Import stock items from CSV
-const importStockItems = (filePath) => {
-  return new Promise((resolve, reject) => {
-    console.log('📦 Importing stock items...');
-    
-    const csvData = fs.readFileSync(filePath, 'utf8');
-    const lines = csvData.split('\n').filter(line => line.trim());
-    
-    // Expected CSV format: item_name,quantity,unit,notes
-    for (let i = 1; i < lines.length; i++) {
-      const [item_name, quantity, unit, notes] = lines[i].split(',').map(v => v.trim());
-      
-      if (item_name && quantity) {
-        db.run(
-          'INSERT INTO stockItems (item_name, quantity, unit, notes) VALUES (?, ?, ?, ?)',
-          [item_name, parseInt(quantity) || 0, unit || 'pcs', notes || '']
+      // normalize headers (lowercase + trim)
+      const headerRow = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const idxTitle = headerRow.findIndex(h => h === 'title');
+      const idxPrice = headerRow.findIndex(h => h === 'default price');
+      const idxUnit  = headerRow.findIndex(h => h === 'default unite');
+
+      if (idxTitle === -1) {
+        console.log('❌ products.csv missing "title" header');
+        return resolve();
+      }
+
+      // Use transaction for better performance and reliability
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+        const stmt = db.prepare(
+          'INSERT INTO stockItems (item_name, quantity, unit, notes) VALUES (?, ?, ?, ?)'
         );
-      }
-    }
-    
-    console.log(`✅ Imported ${lines.length - 1} stock items`);
-    resolve();
-  });
-};
 
-// Import workers from CSV
-const importWorkers = (filePath) => {
-  return new Promise((resolve, reject) => {
-    console.log('👥 Importing workers...');
-    
-    const csvData = fs.readFileSync(filePath, 'utf8');
-    const lines = csvData.split('\n').filter(line => line.trim());
-    
-    // Expected CSV format: F_Name,Surname,Carte_National,Role
-    for (let i = 1; i < lines.length; i++) {
-      const [F_Name, Surname, Carte_National, Role] = lines[i].split(',').map(v => v.trim());
-      
-      if (F_Name && Surname) {
-        db.run(
-          'INSERT INTO workers (F_Name, Surname, Carte_National, Role) VALUES (?, ?, ?, ?)',
-          [F_Name, Surname, Carte_National || '', Role || '']
-        );
-      }
-    }
-    
-    console.log(`✅ Imported ${lines.length - 1} workers`);
-    resolve();
-  });
-};
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',').map(v => v.trim());
+          // skip empty
+          if (!cols[idxTitle]) continue;
 
-// Import from JSON file
-const importFromJSON = (filePath, tableName) => {
-  return new Promise((resolve, reject) => {
-    if (!fs.existsSync(filePath)) {
-      reject(new Error(`File not found: ${filePath}`));
-      return;
-    }
+          const itemName = cols[idxTitle];
+          const unit = idxUnit !== -1 ? cols[idxUnit] : 'pcs';
+          const priceRaw = idxPrice !== -1 ? cols[idxPrice] : '';
+          const notes = priceRaw ? `price: ${priceRaw}` : '';
 
-    const jsonData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    console.log(`📁 Importing ${jsonData.length} records to ${tableName}`);
-
-    jsonData.forEach((record, index) => {
-      const columns = Object.keys(record);
-      const values = Object.values(record);
-      const placeholders = columns.map(() => '?').join(', ');
-      const query = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
-      
-      db.run(query, values, function(err) {
-        if (err) {
-          console.error(`❌ Error importing record ${index}:`, err.message);
+          stmt.run([itemName, 0, unit, notes]);
         }
-      });
-    });
 
-    console.log(`✅ Import completed for ${tableName}`);
-    resolve();
+        stmt.finalize((err) => {
+          if (err) {
+            console.error('❌ Error finalizing statement:', err.message);
+            db.run('ROLLBACK');
+            return reject(err);
+          }
+          db.run('COMMIT', (commitErr) => {
+            if (commitErr) {
+              console.error('❌ Error committing transaction:', commitErr.message);
+              return reject(commitErr);
+            }
+            console.log('✅ Transaction committed successfully');
+            console.log('✅ products.csv import completed');
+            resolve();
+          });
+        });
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
+// Clear existing stock items (optional - uncomment if you want to replace all data)
+const clearStockItems = () => {
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM stockItems', (err) => {
+      if (err) {
+        console.error('❌ Error clearing stock items:', err.message);
+        reject(err);
+      } else {
+        console.log('🗑️  Cleared existing stock items');
+        resolve();
+      }
+    });
   });
 };
 
 // Main import function
 const runImport = async () => {
   try {
-    console.log('🚀 Starting data import...');
+    console.log('🚀 Starting import process...');
     
-    // Import stock items if file exists
-    const stockItemsFile = join(__dirname, 'import', 'stock_items.csv');
-    if (fs.existsSync(stockItemsFile)) {
-      await importStockItems(stockItemsFile);
+    // Clear existing stock items first (uncomment the next line if you want to replace all data)
+    await clearStockItems();
+    
+    // Import products.csv if present
+    const productsFile = join(__dirname, 'import', 'products.csv');
+    if (fs.existsSync(productsFile)) {
+      await importProductsFromCSV(productsFile);
     } else {
-      console.log('⚠️  stock_items.csv not found in database/import/ folder');
+      console.log('⚠️  products.csv not found in database/import/');
     }
     
-    // Import workers if file exists
-    const workersFile = join(__dirname, 'import', 'workers.csv');
-    if (fs.existsSync(workersFile)) {
-      await importWorkers(workersFile);
-    } else {
-      console.log('⚠️  workers.csv not found in database/import/ folder');
-    }
-    
-    // Import users if file exists
-    const usersFile = join(__dirname, 'import', 'users.csv');
-    if (fs.existsSync(usersFile)) {
-      await importFromCSV(usersFile, 'users');
-    } else {
-      console.log('⚠️  users.csv not found in database/import/ folder');
-    }
-    
-    console.log('🎉 Import completed successfully!');
-    
+    console.log('✅ Import process completed!');
   } catch (error) {
-    console.error('❌ Import failed:', error.message);
+    console.error('❌ Import failed:', error);
+    throw error;
   } finally {
     db.close();
   }
 };
 
-// Create import folder if it doesn't exist
-const importFolder = join(__dirname, 'import');
-if (!fs.existsSync(importFolder)) {
-  fs.mkdirSync(importFolder);
-  console.log('📁 Created database/import/ folder');
-}
-
-// Run import if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run if this file is executed directly
+const currentFile = fileURLToPath(import.meta.url);
+if (currentFile === process.argv[1]) {
   runImport()
     .then(() => {
-      console.log('✅ Import finished successfully');
+      console.log('🎉 All done!');
       process.exit(0);
     })
-    .catch((error) => {
-      console.error('❌ Import failed:', error);
+    .catch((err) => {
+      console.error('💥 Error:', err);
       process.exit(1);
     });
 }
-
-export { importFromCSV, importFromJSON, importStockItems, importWorkers }; 

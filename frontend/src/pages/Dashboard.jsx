@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Minus, Warehouse, Home } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
   const [stockNumber, setStockNumber] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchStockItems = async () => {
@@ -19,6 +21,7 @@ const Dashboard = () => {
         }
         
         const stockItems = await response.json();
+        // Now stockItems only contains items with actual stock (quantity > 0)
         setStockNumber(stockItems.length);
       } catch (err) {
         console.error('Error fetching stock items:', err);
@@ -45,7 +48,10 @@ const Dashboard = () => {
       {/* Two Prominent Action Buttons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Bon d'entrée Button */}
-        <button className="bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl">
+        <button 
+          onClick={() => navigate('/bon-entree')}
+          className="bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+        >
           <div className="flex items-center justify-center space-x-4">
             <Plus className="w-12 h-12" />
             <div className="text-left">
@@ -56,7 +62,10 @@ const Dashboard = () => {
         </button>
 
         {/* Bon de sortie Button */}
-        <button className="bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl">
+        <button 
+          onClick={() => navigate('/bon-sortie')}
+          className="bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+        >
           <div className="flex items-center justify-center space-x-4">
             <Minus className="w-12 h-12" />
             <div className="text-left">
