@@ -10,7 +10,12 @@
     "init-db": "node database/init.js",
     "cleanup-db": "node database/cleanup.js",
     "reset-db": "node database/reset.js",
-    "import-data": "node database/import.js"
+    "clear-stock": "node database/clearStock.js",
+    "add-indexes": "node database/addIndexes.js",
+    "seed-login": "node database/seedLoginUsers.js",
+    "fix-vouchers": "node database/fixVoucherUsers.js",
+    "import-data": "node database/import.js",
+    "seed-custom": "node database/seed_custom.js"
   },
   "dependencies": {
     "express": "^4.18.2",

@@ -47,13 +47,46 @@ const createTables = () => {
         )
       `);
 
+      // Create indexes for performance (especially important for large datasets)
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_stockItems_item_name ON stockItems(item_name)
+      `);
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_stockItems_quantity ON stockItems(quantity)
+      `);
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_productCatalog_item_name ON productCatalog(item_name)
+      `);
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_entryVouchers_date ON entryVouchers(date)
+      `);
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_exitVouchers_date ON exitVouchers(date)
+      `);
+
+      // ProductCatalog table (master list of products used for Bon d'entrée search)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS productCatalog (
+          catalog_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_name TEXT NOT NULL,
+          default_unit TEXT DEFAULT 'pcs',
+          default_price REAL,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       // EntryVouchers table (Bon d'entrée)
       db.run(`
         CREATE TABLE IF NOT EXISTS entryVouchers (
           entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          voucher_number TEXT,
           date DATETIME DEFAULT CURRENT_TIMESTAMP,
           added_by INTEGER NOT NULL,
-          FOREIGN KEY (added_by) REFERENCES users (user_id)
+          taken_by INTEGER,
+          notes TEXT,
+          FOREIGN KEY (added_by) REFERENCES users (user_id),
+          FOREIGN KEY (taken_by) REFERENCES workers (worker_id)
         )
       `);
 
@@ -75,9 +108,13 @@ const createTables = () => {
       db.run(`
         CREATE TABLE IF NOT EXISTS exitVouchers (
           exit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          voucher_number TEXT,
           date DATETIME DEFAULT CURRENT_TIMESTAMP,
           handled_by INTEGER NOT NULL,
-          FOREIGN KEY (handled_by) REFERENCES users (user_id)
+          taken_by INTEGER,
+          notes TEXT,
+          FOREIGN KEY (handled_by) REFERENCES users (user_id),
+          FOREIGN KEY (taken_by) REFERENCES workers (worker_id)
         )
       `);
 

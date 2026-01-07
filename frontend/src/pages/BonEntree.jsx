@@ -10,9 +10,9 @@ const BonEntree = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [voucherData, setVoucherData] = useState({
     voucherNumber: '',
-    date: new Date().toISOString().split('T')[0],
     handledBy: '',
     takenBy: '',
+    place: '',
     notes: ''
   });
 
@@ -43,6 +43,21 @@ const BonEntree = () => {
 
     fetchUsersAndWorkers();
   }, []);
+
+  // Auto-fill "Géré par" with logged-in user
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const loggedInUser = JSON.parse(userStr);
+      // Only auto-fill if user is not security role (security users shouldn't create vouchers from normal pages)
+      if (loggedInUser && loggedInUser.role !== 'security' && loggedInUser.username) {
+        setVoucherData(prev => ({
+          ...prev,
+          handledBy: loggedInUser.username
+        }));
+      }
+    }
+  }, [adminUsers]); // Run after adminUsers are loaded
 
   // Search for products in catalog
   const searchProducts = async (term) => {
@@ -177,15 +192,19 @@ const BonEntree = () => {
 
 
     try {
-      // Get next voucher number
-      const voucherNumber = voucherData.voucherNumber || await getNextVoucherNumber();
+      // Get next voucher number (always auto-generated)
+      const voucherNumber = await getNextVoucherNumber();
+
+      // Use current date and time automatically
+      const fullDateTime = new Date().toISOString();
 
       // Create entry voucher
       const voucherResponse = await axios.post('http://localhost:5000/api/entry-vouchers', {
         voucher_number: voucherNumber,
-        date: voucherData.date,
+        date: fullDateTime,
         handled_by: voucherData.handledBy,
         taken_by: voucherData.takenBy,
+        place: voucherData.place || null,
         notes: voucherData.notes
       });
 
@@ -193,6 +212,8 @@ const BonEntree = () => {
 
       // Add each item to the voucher and stock
       for (const item of selectedItems) {
+        console.log('🔍 Processing item:', item);
+        
         // Add item to stock (this will create new stock item or update existing)
         const stockResponse = await axios.post('http://localhost:5000/api/stock-items', {
           item_name: item.item_name,
@@ -202,13 +223,19 @@ const BonEntree = () => {
         });
 
         const stockItem = stockResponse.data;
+        console.log('🔍 Stock item created/updated:', stockItem);
+        console.log('🔍 Stock item ID:', stockItem.item_id);
 
         // Add to voucher details
-        await axios.post('http://localhost:5000/api/entry-vouchers/details', {
+        const detailData = {
           voucher_id: voucherId,
           item_id: stockItem.item_id,
           quantity: item.quantity
-        });
+        };
+        console.log('🔍 Sending to voucher details:', detailData);
+        
+        await axios.post('http://localhost:5000/api/entry-vouchers/details', detailData);
+        console.log('✅ Item added to voucher details successfully');
       }
 
       alert('Bon d\'entrée créé avec succès!');
@@ -217,9 +244,9 @@ const BonEntree = () => {
       setSelectedItems([]);
       setVoucherData({
         voucherNumber: '',
-        date: new Date().toISOString().split('T')[0],
         handledBy: '',
         takenBy: '',
+        place: '',
         notes: ''
       });
       
@@ -423,25 +450,13 @@ const BonEntree = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Numéro du Bon
+                    Lieu / Place
                   </label>
                   <input
                     type="text"
-                    value={voucherData.voucherNumber}
-                    onChange={(e) => setVoucherData(prev => ({ ...prev, voucherNumber: e.target.value }))}
-                    placeholder="Auto-généré si vide"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={voucherData.date}
-                    onChange={(e) => setVoucherData(prev => ({ ...prev, date: e.target.value }))}
+                    value={voucherData.place}
+                    onChange={(e) => setVoucherData(prev => ({ ...prev, place: e.target.value }))}
+                    placeholder="Ex: A-13, B-19, etc."
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                   />
                 </div>
@@ -450,19 +465,15 @@ const BonEntree = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Géré par <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-700 flex items-center">
+                    <User className="h-4 w-4 mr-2 text-slate-500" />
+                    <span className="font-medium">{voucherData.handledBy || 'Non défini'}</span>
+                  </div>
+                  <input
+                    type="hidden"
                     value={voucherData.handledBy}
-                    onChange={(e) => setVoucherData(prev => ({ ...prev, handledBy: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                     required
-                  >
-                    <option value="">Sélectionner un administrateur</option>
-                    {adminUsers.map(user => (
-                      <option key={user.user_id} value={user.username}>
-                        {user.username}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 <div>
@@ -482,20 +493,6 @@ const BonEntree = () => {
                       </option>
                     ))}
                   </select>
-                </div>
-
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    value={voucherData.notes}
-                    onChange={(e) => setVoucherData(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Notes additionnelles..."
-                    rows="3"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-none"
-                  />
                 </div>
               </div>
 

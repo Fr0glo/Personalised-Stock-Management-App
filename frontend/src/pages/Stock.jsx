@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Package, Plus, Search, Filter, AlertTriangle, CheckCircle } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Package, Search, Filter, AlertTriangle, CheckCircle } from 'lucide-react';
 
 const Stock = () => {
   const [stockItems, setStockItems] = useState([]);
@@ -14,7 +14,8 @@ const Stock = () => {
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch('http://localhost:5000/api/stock-items');
+        // Limit to 500 items for performance (can be increased if needed)
+        const response = await fetch('http://localhost:5000/api/stock-items?limit=500');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -34,16 +35,21 @@ const Stock = () => {
     fetchStockItems();
   }, []);
 
-  // Filter and search functionality
-  const filteredItems = stockItems.filter(item => {
-    const matchesSearch = item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.notes?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesUnit = filterUnit === 'all' || item.unit === filterUnit;
-    return matchesSearch && matchesUnit;
-  });
+  // Memoize unique units calculation
+  const uniqueUnits = useMemo(() => {
+    return [...new Set(stockItems.map(item => item.unit))];
+  }, [stockItems]);
 
-  // Get unique units for filter
-  const uniqueUnits = [...new Set(stockItems.map(item => item.unit))];
+  // Memoize filtered items to avoid recalculating on every render
+  const filteredItems = useMemo(() => {
+    const lowerSearch = searchTerm.toLowerCase();
+    return stockItems.filter(item => {
+      const matchesSearch = item.item_name.toLowerCase().includes(lowerSearch) ||
+                           item.notes?.toLowerCase().includes(lowerSearch);
+      const matchesUnit = filterUnit === 'all' || item.unit === filterUnit;
+      return matchesSearch && matchesUnit;
+    });
+  }, [stockItems, searchTerm, filterUnit]);
 
   // Get stock status based on quantity
   const getStockStatus = (quantity) => {
@@ -194,15 +200,6 @@ const Stock = () => {
                     </div>
                   )}
 
-                  {/* Action Buttons */}
-                  <div className="flex space-x-2 pt-2">
-                    <button className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors">
-                      Modifier
-                    </button>
-                    <button className="flex-1 bg-slate-700 hover:bg-slate-800 text-white py-2 px-3 rounded-lg text-sm font-medium transition-colors">
-                      Détails
-                    </button>
-                  </div>
                 </div>
               </div>
             );

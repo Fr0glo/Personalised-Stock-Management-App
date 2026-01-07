@@ -19,7 +19,7 @@ router.get('/voucher/:voucherId', async (req, res) => {
   try {
     const { voucherId } = req.params;
     const details = await getAll(
-      'SELECT ed.*, si.item_name, si.unit FROM exitDetails ed JOIN stockItems si ON ed.item_id = si.item_id WHERE ed.voucher_id = ?',
+      'SELECT ed.*, si.item_name, si.unit FROM exitDetails ed LEFT JOIN stockItems si ON ed.item_id = si.item_id WHERE ed.voucher_id = ?',
       [voucherId]
     );
     res.json(details);
@@ -68,11 +68,18 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Get voucher to map responsible users
+    const voucher = await getRow('SELECT handled_by, taken_by FROM exitVouchers WHERE exit_id = ?', [voucher_id]);
+
     // Insert into exitDetails
     const result = await runQuery(
       'INSERT INTO exitDetails (exit_id, item_id, worker_id, quantity) VALUES (?, ?, ?, ?)',
-      [voucher_id, item_id, 1, quantity] // Using worker_id = 1 as default
+      [voucher_id, item_id, voucher?.taken_by || 1, quantity]
     );
+
+    // Get current stock quantity before reducing
+    const quantityBefore = currentStock.quantity;
+    const quantityAfter = quantityBefore - Number(quantity);
 
     // Reduce stock quantity
     console.log(`🔍 Reducing stock: item_id=${item_id}, quantity=${quantity}`);
@@ -82,12 +89,24 @@ router.post('/', async (req, res) => {
     );
     console.log(`📊 Stock update result:`, stockResult);
     
-    // Check if stock quantity is now 0 or negative, and delete the item if so
+    // Log audit trail
+    await runQuery(
+      'INSERT INTO auditLogs (action, item_id, user_id, quantity_before, quantity_after) VALUES (?, ?, ?, ?, ?)',
+      ['exit', item_id, voucher ? voucher.handled_by : 1, quantityBefore, quantityAfter]
+    );
+
+    console.log('📊 Stock reduced:', {
+      item_id,
+      quantity_before: quantityBefore,
+      quantity_removed: quantity,
+      quantity_after: quantityAfter,
+      handled_by_user: voucher ? voucher.handled_by : 1
+    });
+    
+    // Ensure stock quantity doesn't drop below zero
     const updatedStock = await getRow('SELECT quantity FROM stockItems WHERE item_id = ?', [item_id]);
-    if (updatedStock && updatedStock.quantity <= 0) {
-      console.log(`🗑️ Deleting item with zero/negative stock: item_id=${item_id}`);
-      await runQuery('DELETE FROM stockItems WHERE item_id = ?', [item_id]);
-      console.log(`✅ Item deleted from stock`);
+    if (updatedStock && updatedStock.quantity < 0) {
+      await runQuery('UPDATE stockItems SET quantity = 0 WHERE item_id = ?', [item_id]);
     }
 
     res.status(201).json({

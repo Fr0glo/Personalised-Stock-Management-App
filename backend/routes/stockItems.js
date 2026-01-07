@@ -6,7 +6,7 @@ const router = express.Router();
 // GET all stock items (only items with actual stock)
 router.get('/', async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, limit = 100 } = req.query; // Default limit of 100 for performance
     let query = 'SELECT * FROM stockItems WHERE quantity > 0';
     let params = [];
 
@@ -17,6 +17,12 @@ router.get('/', async (req, res) => {
     }
 
     query += ' ORDER BY item_name';
+    
+    // Add limit for performance (prevents loading thousands of items)
+    if (limit && parseInt(limit) > 0) {
+      query += ' LIMIT ?';
+      params.push(parseInt(limit));
+    }
 
     const stockItems = await getAll(query, params);
     res.json(stockItems);
@@ -71,7 +77,7 @@ router.post('/', async (req, res) => {
         [item_name, quantity || 0, unit || 'pcs', notes, 1]
       );
       
-      const createdItem = await getRow('SELECT * FROM stockItems WHERE item_id = ?', [result.lastID]);
+      const createdItem = await getRow('SELECT * FROM stockItems WHERE item_id = ?', [result.id]);
       res.status(201).json(createdItem);
     }
   } catch (error) {

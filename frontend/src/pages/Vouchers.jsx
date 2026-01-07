@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { FileText, Plus, Minus, Calendar, User, Package, Search, Filter, Eye, Download } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { FileText, Plus, Minus, Calendar, User, Package, Search, Eye } from 'lucide-react';
 
 const Vouchers = () => {
   const [entryVouchers, setEntryVouchers] = useState([]);
@@ -12,6 +12,15 @@ const Vouchers = () => {
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [voucherDetails, setVoucherDetails] = useState({});
+
+  const toTitleCase = (value) => {
+    if (!value) return null;
+    return value
+      .split(' ')
+      .filter(Boolean)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  };
 
   useEffect(() => {
     const fetchVouchers = async () => {
@@ -34,25 +43,13 @@ const Vouchers = () => {
         setEntryVouchers(entryData);
         setExitVouchers(exitData);
         
-        // Fetch details for all vouchers to get worker information
-        const allVouchers = [...entryData, ...exitData];
-        const detailsPromises = allVouchers.map(async (voucher) => {
-          const type = voucher.entry_id ? 'entry' : 'exit';
-          const id = voucher.entry_id || voucher.exit_id;
-          try {
-            const response = await fetch(`http://localhost:5000/api/${type}-vouchers/${id}`);
-            if (response.ok) {
-              const details = await response.json();
-              return { [`${type}_${id}`]: details };
-            }
-          } catch (err) {
-            console.error(`Error fetching details for ${type} voucher ${id}:`, err);
-          }
-          return {};
-        });
-        
-        const allDetails = await Promise.all(detailsPromises);
-        const detailsMap = allDetails.reduce((acc, detail) => ({ ...acc, ...detail }), {});
+      const detailsMap = {};
+      entryData.forEach(voucher => {
+        detailsMap[`entry_${voucher.entry_id}`] = voucher;
+      });
+      exitData.forEach(voucher => {
+        detailsMap[`exit_${voucher.exit_id}`] = voucher;
+      });
         setVoucherDetails(detailsMap);
         
       } catch (err) {
@@ -67,12 +64,30 @@ const Vouchers = () => {
   }, []);
 
   const fetchVoucherDetails = async (voucherId, type) => {
+    const list = type === 'entry' ? entryVouchers : exitVouchers;
+    const localVoucher = list.find(v => v[`${type}_id`] === voucherId);
+
+    if (localVoucher) {
+      setSelectedVoucher(localVoucher);
+      setShowDetails(true);
+    } else {
+      setShowDetails(true);
+    }
+
     try {
       const response = await fetch(`http://localhost:5000/api/${type}-vouchers/${voucherId}`);
       if (response.ok) {
         const details = await response.json();
         setSelectedVoucher(details);
-        setShowDetails(true);
+        setVoucherDetails(prev => ({
+          ...prev,
+          [`${type}_${voucherId}`]: details
+        }));
+        if (type === 'entry') {
+          setEntryVouchers(prev => prev.map(v => v.entry_id === voucherId ? { ...v, ...details } : v));
+        } else {
+          setExitVouchers(prev => prev.map(v => v.exit_id === voucherId ? { ...v, ...details } : v));
+        }
       }
     } catch (err) {
       console.error('Error fetching voucher details:', err);
@@ -80,7 +95,29 @@ const Vouchers = () => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
+    if (!dateString) return 'Non spécifiée';
+    
+    const d = new Date(dateString);
+    if (Number.isNaN(d.getTime())) return 'Non spécifiée';
+    
+    // Check if the date string includes time information
+    const hasTime = typeof dateString === 'string' && (
+      dateString.includes('T') || 
+      dateString.includes(' ') || 
+      dateString.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
+    );
+    
+    // If no time info, show date only (old vouchers)
+    if (!hasTime && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return d.toLocaleDateString('fr-FR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+    
+    // Otherwise show date and time
+    return d.toLocaleString('fr-FR', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -89,45 +126,102 @@ const Vouchers = () => {
     });
   };
 
-  // Get unique worker names for filter (actual workers who received items)
-  const allWorkers = [
-    ...new Set(
-      Object.values(voucherDetails)
-        .flatMap(detail => detail.details || [])
-        .map(detail => `${detail.F_Name} ${detail.Surname}`)
-        .filter(Boolean)
-    )
-  ].sort();
+  // Memoize unique worker names for filter (actual workers who received items)
+  const allWorkers = useMemo(() => {
+    return [
+      ...new Set(
+        Object.values(voucherDetails)
+          .flatMap(detail => detail.details || [])
+          .map(detail => {
+            if (detail.worker_name) {
+              return detail.worker_name.trim();
+            }
+            const fallback = `${detail.F_Name || ''} ${detail.Surname || ''}`.trim();
+            return fallback || null;
+          })
+          .filter(Boolean)
+      )
+    ].sort();
+  }, [voucherDetails]);
 
-  const filteredVouchers = activeTab === 'entry' 
-    ? entryVouchers.filter(voucher => {
-        const matchesSearch = voucher.added_by_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             voucher.entry_id.toString().includes(searchTerm);
+  // Memoize filtered vouchers to avoid recalculating on every render
+  const filteredVouchers = useMemo(() => {
+    if (activeTab === 'entry') {
+      const lowerSearch = searchTerm.toLowerCase();
+      return entryVouchers.filter(voucher => {
+        const matchesSearch = [
+          voucher.voucher_number,
+          voucher.added_by_name,
+          voucher.taken_by_name,
+          voucher.notes
+        ].some(field => field?.toString().toLowerCase().includes(lowerSearch)) ||
+        voucher.entry_id?.toString().includes(searchTerm);
         
         // Check if voucher has the selected worker
         const voucherKey = `entry_${voucher.entry_id}`;
         const details = voucherDetails[voucherKey];
         const hasWorker = selectedPersonnel === 'all' || 
-          (details?.details && details.details.some(detail => 
-            `${detail.F_Name} ${detail.Surname}` === selectedPersonnel
-          ));
+          (details?.details && details.details.some(detail => {
+            const name =
+              (detail.worker_name?.trim() ||
+               `${detail.F_Name || ''} ${detail.Surname || ''}`.trim());
+            return name && name === selectedPersonnel;
+          }));
         
         return matchesSearch && hasWorker;
-      })
-    : exitVouchers.filter(voucher => {
-        const matchesSearch = voucher.handled_by_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             voucher.exit_id.toString().includes(searchTerm);
+      });
+    } else {
+      const lowerSearch = searchTerm.toLowerCase();
+      return exitVouchers.filter(voucher => {
+        const matchesSearch = [
+          voucher.voucher_number,
+          voucher.handled_by_name,
+          voucher.taken_by_name,
+          voucher.notes
+        ].some(field => field?.toString().toLowerCase().includes(lowerSearch)) ||
+        voucher.exit_id?.toString().includes(searchTerm);
         
         // Check if voucher has the selected worker
         const voucherKey = `exit_${voucher.exit_id}`;
         const details = voucherDetails[voucherKey];
         const hasWorker = selectedPersonnel === 'all' || 
           (details?.details && details.details.some(detail => 
-            `${detail.F_Name} ${detail.Surname}` === selectedPersonnel
+            (detail.worker_name?.trim() || `${detail.F_Name || ''} ${detail.Surname || ''}`.trim()) === selectedPersonnel
           ));
         
         return matchesSearch && hasWorker;
       });
+    }
+  }, [activeTab, entryVouchers, exitVouchers, searchTerm, selectedPersonnel, voucherDetails]);
+
+  const modalTakenByName = (() => {
+    if (!selectedVoucher) return null;
+    // Prefer header-level taken_by_name
+    let name = toTitleCase(selectedVoucher.taken_by_name);
+    // Fallback: derive from details worker_name values
+    if (!name && selectedVoucher.details && selectedVoucher.details.length > 0) {
+      const workerNames = [
+        ...new Set(
+          selectedVoucher.details
+            .map(detail =>
+              (detail.worker_name?.trim() ||
+               `${detail.F_Name || ''} ${detail.Surname || ''}`.trim())
+            )
+            .filter(Boolean)
+        )
+      ];
+      if (workerNames.length > 0) {
+        name = workerNames.join(', ');
+      }
+    }
+    return name;
+  })();
+  const modalVoucherNumber = selectedVoucher
+    ? selectedVoucher.voucher_number || selectedVoucher.entry_id || selectedVoucher.exit_id
+    : null;
+  const modalTotalQuantity = selectedVoucher?.details
+    ? selectedVoucher.details.reduce((total, detail) => total + (detail.quantity || 0), 0)
+    : 0;
 
   if (isLoading) {
     return (
@@ -245,9 +339,43 @@ const Vouchers = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredVouchers.map((voucher) => (
-            <div
-              key={voucher[`${activeTab}_id`]}
+          {filteredVouchers.map((voucher) => {
+            const voucherIdKey = `${activeTab}_id`;
+            const voucherId = voucher[voucherIdKey];
+            const voucherKey = `${activeTab}_${voucherId}`;
+            const voucherData = voucherDetails[voucherKey] || voucher;
+            const details = voucherData.details || [];
+            const handledByName = toTitleCase(
+              activeTab === 'entry'
+                ? voucherData.added_by_name
+                : voucherData.handled_by_name
+            );
+            // Compute Pris par (taken by) with fallback to details worker_name
+            let takenByName = toTitleCase(voucherData.taken_by_name);
+            if (!takenByName && details.length > 0) {
+              const workerNames = [
+                ...new Set(
+                  details
+                    .map(detail =>
+                      (detail.worker_name?.trim() ||
+                       `${detail.F_Name || ''} ${detail.Surname || ''}`.trim())
+                    )
+                    .filter(Boolean)
+                )
+              ];
+              if (workerNames.length > 0) {
+                takenByName = workerNames.join(', ');
+              }
+            }
+            const totalQuantity = details.reduce((total, detail) => total + (detail.quantity || 0), 0);
+            const topDetails = details.slice(0, 3);
+            const remainingCount = details.length - topDetails.length;
+            const voucherNumber = voucherData.voucher_number || voucherId;
+            const typeLabel = activeTab === 'entry' ? "Bon d'Entrée" : 'Bon de Sortie';
+
+            return (
+              <div
+                key={voucherId}
               className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow duration-300"
             >
               <div className="p-6">
@@ -263,38 +391,76 @@ const Vouchers = () => {
                       </div>
                       <div>
                         <h3 className="text-lg font-semibold text-slate-800">
-                          Bon {activeTab === 'entry' ? 'd\'Entrée' : 'de Sortie'} #{voucher[`${activeTab}_id`]}
+                            {typeLabel} #{voucherNumber}
                         </h3>
-                        <p className="text-sm text-slate-600">
-                          {activeTab === 'entry' ? 'Ajouté par' : 'Géré par'}: {voucher[`${activeTab === 'entry' ? 'added_by_name' : 'handled_by_name'}`]}
+                          <p className="text-xs uppercase tracking-wide text-slate-500">
+                            {activeTab === 'entry' ? 'Entrée' : 'Sortie'} • Identifiant #{voucherId}
                         </p>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="h-4 w-4 text-slate-400" />
-                        <span className="text-slate-600">Date:</span>
-                        <span className="font-medium">{formatDate(voucher.date)}</span>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-4 w-4 text-slate-400" />
+                          <span className="text-slate-600">Date:</span>
+                          <span className="font-medium">
+                            {formatDate(voucherData.date || voucher.date)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-slate-400" />
+                          <span className="text-slate-600">Géré par:</span>
+                          <span className="font-medium">{handledByName || 'Non spécifié'}</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-slate-400" />
+                          <span className="text-slate-600">Pris par:</span>
+                          <span className="font-medium">{takenByName || 'Non spécifié'}</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <Package className="h-4 w-4 text-slate-400" />
+                          <span className="text-slate-600">Articles / Qté:</span>
+                          <span className="font-medium">
+                            {details.length} / {totalQuantity}
+                          </span>
+                        </div>
                       </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <User className="h-4 w-4 text-slate-400" />
-                        <span className="text-slate-600">Personnel:</span>
-                        <span className="font-medium">{voucher[`${activeTab === 'entry' ? 'added_by_name' : 'handled_by_name'}`]}</span>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <Package className="h-4 w-4 text-slate-400" />
-                        <span className="text-slate-600">Type:</span>
-                        <span className="font-medium">{activeTab === 'entry' ? 'Entrée' : 'Sortie'}</span>
-                      </div>
+
+                      {voucherData.notes && (
+                        <div className="mt-3 text-sm text-slate-600">
+                          <span className="font-medium text-slate-700">Notes:</span> {voucherData.notes}
+                        </div>
+                      )}
+
+                      {details.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="text-xs font-semibold text-slate-500 mb-2">Articles</h4>
+                          <div className="space-y-2">
+                            {topDetails.map(detail => (
+                              <div key={`${voucherId}-${detail.item_id}`} className="flex items-start justify-between text-sm">
+                                <div>
+                                  <p className="font-medium text-slate-800">{detail.item_name}</p>
+                                  {/* Per-article personnel is shown in the popup details */}
+                                </div>
+                                <span className="font-semibold text-slate-700">{detail.quantity}</span>
+                              </div>
+                            ))}
+                            {remainingCount > 0 && (
+                              <p className="text-xs text-slate-500">
+                                + {remainingCount} autre{remainingCount > 1 ? 's' : ''} article{remainingCount > 1 ? 's' : ''}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  
-                  <div className="flex space-x-2">
+                    
+                    <div className="flex space-x-2 ml-4">
                     <button
-                      onClick={() => fetchVoucherDetails(voucher[`${activeTab}_id`], activeTab)}
+                        onClick={() => fetchVoucherDetails(voucherId, activeTab)}
                       className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
                     >
                       <Eye className="h-4 w-4" />
@@ -304,7 +470,8 @@ const Vouchers = () => {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -315,7 +482,7 @@ const Vouchers = () => {
             <div className="p-6 border-b border-slate-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-slate-800">
-                  Détails du Bon {selectedVoucher.entry_id ? 'd\'Entrée' : 'de Sortie'} #{selectedVoucher.entry_id || selectedVoucher.exit_id}
+                  Détails du Bon {selectedVoucher.entry_id ? 'd\'Entrée' : 'de Sortie'} #{modalVoucherNumber}
                 </h2>
                 <button
                   onClick={() => setShowDetails(false)}
@@ -332,13 +499,27 @@ const Vouchers = () => {
                   <h3 className="text-sm font-medium text-slate-600 mb-2">Informations Générales</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
+                      <span className="text-slate-600">Numéro:</span>
+                      <span className="font-medium">{modalVoucherNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-slate-600">Date:</span>
-                      <span className="font-medium">{formatDate(selectedVoucher.date)}</span>
+                      <span className="font-medium">
+                        {formatDate(selectedVoucher.date || (selectedVoucher.date === '' ? null : selectedVoucher.date))}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Géré par:</span>
-                      <span className="font-medium">{selectedVoucher.added_by_name || selectedVoucher.handled_by_name}</span>
+                      <span className="font-medium">
+                        {toTitleCase(selectedVoucher.added_by_name || selectedVoucher.handled_by_name) || 'Non spécifié'}
+                      </span>
                     </div>
+                    {modalTakenByName && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Pris par:</span>
+                        <span className="font-medium">{modalTakenByName}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
@@ -351,10 +532,16 @@ const Vouchers = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Quantité totale:</span>
-                      <span className="font-medium">
-                        {selectedVoucher.details?.reduce((total, detail) => total + detail.quantity, 0) || 0}
+                      <span className="font-medium">{modalTotalQuantity}</span>
+                    </div>
+                    {selectedVoucher.notes && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Notes:</span>
+                        <span className="font-medium text-right max-w-[220px]">
+                          {selectedVoucher.notes}
                       </span>
                     </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -365,7 +552,7 @@ const Vouchers = () => {
                   <div className="space-y-3">
                     {selectedVoucher.details.map((detail, index) => (
                       <div key={index} className="bg-slate-50 p-4 rounded-lg border">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                           <div>
                             <span className="text-slate-600">Article:</span>
                             <p className="font-medium">{detail.item_name}</p>
@@ -376,11 +563,12 @@ const Vouchers = () => {
                           </div>
                           <div>
                             <span className="text-slate-600">Personnel:</span>
-                            <p className="font-medium">{detail.F_Name} {detail.Surname}</p>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">ID Personnel:</span>
-                            <p className="font-medium">{detail.worker_id}</p>
+                            <p className="font-medium">
+                              {toTitleCase(detail.worker_name) || 'Non spécifié'}
+                            </p>
+                            {detail.worker_id && (
+                              <p className="text-xs text-slate-500 mt-1">ID: {detail.worker_id}</p>
+                            )}
                           </div>
                         </div>
                       </div>

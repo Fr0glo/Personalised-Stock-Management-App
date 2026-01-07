@@ -4,35 +4,44 @@ import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
   const [stockNumber, setStockNumber] = useState(0);
+  const [personnelCount, setPersonnelCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchStockItems = async () => {
+    const fetchData = async () => {
       try {
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch('http://localhost:5000/api/stock-items');
+        // Fetch stock items and workers in parallel
+        const [stockResponse, workersResponse] = await Promise.all([
+          fetch('http://localhost:5000/api/stock-items'),
+          fetch('http://localhost:5000/api/workers')
+        ]);
         
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        if (!stockResponse.ok || !workersResponse.ok) {
+          throw new Error('Failed to fetch data');
         }
         
-        const stockItems = await response.json();
+        const stockItems = await stockResponse.json();
+        const workers = await workersResponse.json();
+        
         // Now stockItems only contains items with actual stock (quantity > 0)
         setStockNumber(stockItems.length);
+        setPersonnelCount(workers.length);
       } catch (err) {
-        console.error('Error fetching stock items:', err);
-        setError('Failed to load stock data');
+        console.error('Error fetching data:', err);
+        setError('Failed to load data');
         setStockNumber(0);
+        setPersonnelCount(0);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchStockItems();
+    fetchData();
   }, []); // Empty dependency array - only run once on mount
 
 
@@ -112,8 +121,16 @@ const Dashboard = () => {
               <h3 className="text-lg font-semibold text-slate-800">
                 Nombre de personnel actif
               </h3>
-              <p className="text-3xl font-bold text-emerald-600">24</p>
-              <p className="text-sm text-slate-500">Employés actifs</p>
+              {isLoading ? (
+                <p className="text-3xl font-bold text-slate-400">...</p>
+              ) : error ? (
+                <p className="text-lg font-bold text-red-500">Erreur</p>
+              ) : (
+                <p className="text-3xl font-bold text-emerald-600">{personnelCount}</p>
+              )}
+              <p className="text-sm text-slate-500">
+                {isLoading ? 'Chargement...' : error ? error : 'Employés actifs'}
+              </p>
             </div>
           </div>
         </div>

@@ -7,15 +7,20 @@ const __dirname = dirname(__filename);
 
 const dbPath = join(__dirname, 'stock_management.db');
 
-// Create database connection
+// Single persistent database connection (more efficient than opening/closing for each query)
+let dbInstance = null;
+
 const getDatabase = () => {
-  return new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-      console.error('Error opening database:', err.message);
-    } else {
-      console.log('Connected to SQLite database');
-    }
-  });
+  if (!dbInstance) {
+    dbInstance = new sqlite3.Database(dbPath, (err) => {
+      if (err) {
+        console.error('Error opening database:', err.message);
+      }
+    });
+    // Enable foreign keys
+    dbInstance.run('PRAGMA foreign_keys = ON');
+  }
+  return dbInstance;
 };
 
 // Helper function to run queries with promises
@@ -23,7 +28,6 @@ const runQuery = (query, params = []) => {
   return new Promise((resolve, reject) => {
     const db = getDatabase();
     db.run(query, params, function(err) {
-      db.close();
       if (err) {
         reject(err);
       } else {
@@ -38,7 +42,6 @@ const getRow = (query, params = []) => {
   return new Promise((resolve, reject) => {
     const db = getDatabase();
     db.get(query, params, (err, row) => {
-      db.close();
       if (err) {
         reject(err);
       } else {
@@ -53,7 +56,6 @@ const getAll = (query, params = []) => {
   return new Promise((resolve, reject) => {
     const db = getDatabase();
     db.all(query, params, (err, rows) => {
-      db.close();
       if (err) {
         reject(err);
       } else {

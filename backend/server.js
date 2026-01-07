@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
 // Import routes
+import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import workerRoutes from './routes/workers.js';
 import stockItemRoutes from './routes/stockItems.js';
@@ -26,6 +27,7 @@ app.use(express.json());  // Parse JSON requests
 app.use(express.urlencoded({ extended: true }));  // Parse form data
 
 // API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/workers', workerRoutes);
 app.use('/api/stock-items', stockItemRoutes);

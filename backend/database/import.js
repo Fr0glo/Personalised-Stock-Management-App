@@ -20,7 +20,7 @@ const importProductsFromCSV = (filePath) => {
         return resolve();
       }
 
-      console.log('📦 Importing products.csv → stockItems ...');
+      console.log('📦 Importing products.csv → stockItems & productCatalog ...');
       const csvData = fs.readFileSync(filePath, 'utf8');
       const lines = csvData.split('\n').filter(line => line.trim());
       if (lines.length < 2) {
@@ -42,8 +42,11 @@ const importProductsFromCSV = (filePath) => {
       // Use transaction for better performance and reliability
       db.serialize(() => {
         db.run('BEGIN TRANSACTION');
-        const stmt = db.prepare(
+        const stockStmt = db.prepare(
           'INSERT INTO stockItems (item_name, quantity, unit, notes) VALUES (?, ?, ?, ?)'
+        );
+        const catalogStmt = db.prepare(
+          'INSERT INTO productCatalog (item_name, default_unit, default_price, notes) VALUES (?, ?, ?, ?)'
         );
 
         for (let i = 1; i < lines.length; i++) {
@@ -55,24 +58,36 @@ const importProductsFromCSV = (filePath) => {
           const unit = idxUnit !== -1 ? cols[idxUnit] : 'pcs';
           const priceRaw = idxPrice !== -1 ? cols[idxPrice] : '';
           const notes = priceRaw ? `price: ${priceRaw}` : '';
+          const price = priceRaw ? parseFloat(priceRaw) || null : null;
 
-          stmt.run([itemName, 0, unit, notes]);
+          // Insert into stockItems with zero initial quantity (acts as template until used)
+          stockStmt.run([itemName, 0, unit, notes]);
+
+          // Insert into productCatalog for Bon d'entrée search
+          catalogStmt.run([itemName, unit, price, notes]);
         }
 
-        stmt.finalize((err) => {
-          if (err) {
-            console.error('❌ Error finalizing statement:', err.message);
+        stockStmt.finalize((stockErr) => {
+          if (stockErr) {
+            console.error('❌ Error finalizing stockItems statement:', stockErr.message);
             db.run('ROLLBACK');
-            return reject(err);
+            return reject(stockErr);
           }
-          db.run('COMMIT', (commitErr) => {
-            if (commitErr) {
-              console.error('❌ Error committing transaction:', commitErr.message);
-              return reject(commitErr);
+          catalogStmt.finalize((catalogErr) => {
+            if (catalogErr) {
+              console.error('❌ Error finalizing productCatalog statement:', catalogErr.message);
+              db.run('ROLLBACK');
+              return reject(catalogErr);
             }
-            console.log('✅ Transaction committed successfully');
-            console.log('✅ products.csv import completed');
-            resolve();
+            db.run('COMMIT', (commitErr) => {
+              if (commitErr) {
+                console.error('❌ Error committing transaction:', commitErr.message);
+                return reject(commitErr);
+              }
+              console.log('✅ Transaction committed successfully');
+              console.log('✅ products.csv import completed');
+              resolve();
+            });
           });
         });
       });
@@ -82,17 +97,27 @@ const importProductsFromCSV = (filePath) => {
   });
 };
 
-// Clear existing stock items (optional - uncomment if you want to replace all data)
+// Clear existing stock items and catalog entries
 const clearStockItems = () => {
   return new Promise((resolve, reject) => {
-    db.run('DELETE FROM stockItems', (err) => {
-      if (err) {
-        console.error('❌ Error clearing stock items:', err.message);
-        reject(err);
-      } else {
-        console.log('🗑️  Cleared existing stock items');
-        resolve();
-      }
+    db.serialize(() => {
+      db.run('DELETE FROM stockItems', (err) => {
+        if (err) {
+          console.error('❌ Error clearing stock items:', err.message);
+          return reject(err);
+        } else {
+          console.log('🗑️  Cleared existing stock items');
+        }
+      });
+      db.run('DELETE FROM productCatalog', (err) => {
+        if (err) {
+          console.error('❌ Error clearing product catalog:', err.message);
+          return reject(err);
+        } else {
+          console.log('🗑️  Cleared existing product catalog items');
+          resolve();
+        }
+      });
     });
   });
 };

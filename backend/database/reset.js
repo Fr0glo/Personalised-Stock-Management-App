@@ -1,10 +1,11 @@
 import sqlite3 from 'sqlite3';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === __filename;
 
 const dbPath = join(__dirname, 'stock_management.db');
 
@@ -55,6 +56,18 @@ const resetDatabase = () => {
           unit TEXT DEFAULT 'pcs',
           notes TEXT,
           is_dynamic BOOLEAN DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // ProductCatalog table (master list of products used for Bon d'entrée search)
+      db.run(`
+        CREATE TABLE productCatalog (
+          catalog_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_name TEXT NOT NULL,
+          default_unit TEXT DEFAULT 'pcs',
+          default_price REAL,
+          notes TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
@@ -208,7 +221,7 @@ const resetDatabase = () => {
 };
 
 // Run reset if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectRun) {
   resetDatabase()
     .then(() => {
       console.log('✅ Reset finished successfully');

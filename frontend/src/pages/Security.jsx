@@ -134,7 +134,9 @@ const Security = () => {
                       role="menuitem"
                       onClick={() => {
                         setIsUserMenuOpen(false);
-                        // Handle logout here
+                        localStorage.removeItem('user');
+                        localStorage.removeItem('isAuthenticated');
+                        window.location.href = '/login';
                       }}
                     >
                       Logout

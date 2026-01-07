@@ -34,18 +34,70 @@ router.post('/', async (req, res) => {
   try {
     const { voucher_id, item_id, quantity, unit } = req.body;
 
+    console.log('🔍 Entry voucher details request:', req.body);
+    console.log('🔍 Validation:', {
+      voucher_id: !!voucher_id,
+      item_id: !!item_id,
+      quantity: !!quantity,
+      voucher_id_value: voucher_id,
+      item_id_value: item_id,
+      quantity_value: quantity
+    });
+
     if (!voucher_id || !item_id || !quantity) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        received: { voucher_id, item_id, quantity },
+        required: ['voucher_id', 'item_id', 'quantity']
+      });
     }
 
+    // Get current stock quantity before adding
+    const currentStock = await getRow('SELECT quantity FROM stockItems WHERE item_id = ?', [item_id]);
+    const quantityBefore = currentStock ? currentStock.quantity : 0;
+    const quantityAfter = quantityBefore + Number(quantity);
+
+    // Insert entry detail
+    console.log('🔍 Inserting entry detail:', {
+      entry_id: voucher_id,
+      item_id: item_id,
+      worker_id: 1,
+      quantity: quantity
+    });
+    
     const result = await runQuery(
       'INSERT INTO entryDetails (entry_id, item_id, worker_id, quantity) VALUES (?, ?, ?, ?)',
       [voucher_id, item_id, 1, quantity] // Using worker_id = 1 as default
     );
+    
+    console.log('✅ Entry detail inserted with ID:', result.id);
+
+    // Update stock quantity
+    await runQuery(
+      'UPDATE stockItems SET quantity = ? WHERE item_id = ?',
+      [quantityAfter, item_id]
+    );
+
+    // Get voucher details to find who handled it
+    const voucher = await getRow('SELECT added_by FROM entryVouchers WHERE entry_id = ?', [voucher_id]);
+    
+    // Log audit trail
+    await runQuery(
+      'INSERT INTO auditLogs (action, item_id, user_id, quantity_before, quantity_after) VALUES (?, ?, ?, ?, ?)',
+      ['entry', item_id, voucher ? voucher.added_by : 1, quantityBefore, quantityAfter]
+    );
+
+    console.log('📊 Stock updated:', {
+      item_id,
+      quantity_before: quantityBefore,
+      quantity_added: quantity,
+      quantity_after: quantityAfter,
+      handled_by_user: voucher ? voucher.added_by : 1
+    });
 
     res.status(201).json({
-      detail_id: result.lastID,
-      message: 'Item added to entry voucher successfully'
+      detail_id: result.id,
+      message: 'Item added to entry voucher successfully, stock updated and audit logged'
     });
   } catch (error) {
     console.error('Error adding item to entry voucher:', error);
