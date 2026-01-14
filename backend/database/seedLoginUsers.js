@@ -10,7 +10,7 @@ const dbPath = join(__dirname, 'stock_management.db');
 
 const seedLoginUsers = () => {
   return new Promise((resolvePromise, reject) => {
-    console.log('👤 Seeding login users...');
+    console.log('Seeding login users...');
 
     const db = new sqlite3.Database(dbPath);
 
@@ -39,9 +39,9 @@ const seedLoginUsers = () => {
           [user.username, user.password, user.role],
           function(err) {
             if (err) {
-              console.error(`❌ Error inserting ${user.username}:`, err.message);
+              console.error(`Error inserting ${user.username}:`, err.message);
             } else {
-              console.log(`✅ Added/Updated user: ${user.username}`);
+              console.log(`Added/Updated user: ${user.username}`);
             }
 
             if (index === officeUsers.length - 1) {
@@ -54,7 +54,7 @@ const seedLoginUsers = () => {
                   if (err) {
                     console.warn('Warning updating brahim:', err.message);
                   } else {
-                    console.log(`✅ Updated Brahim Bahssi worker record`);
+                    console.log(`Updated Brahim Bahssi worker record`);
                   }
 
                   db.run(
@@ -65,7 +65,7 @@ const seedLoginUsers = () => {
                       if (err) {
                         console.warn('Warning updating mohamad:', err.message);
                       } else {
-                        console.log(`✅ Updated Mohamad Baadi worker record`);
+                        console.log(`Updated Mohamad Baadi worker record`);
                       }
 
                       // Add password column to workers if needed
@@ -81,12 +81,12 @@ const seedLoginUsers = () => {
                           if (closeErr) {
                             reject(closeErr);
                           } else {
-                            console.log('🎉 Login users seeded successfully!');
-                            console.log('\n📋 Office Staff (Normal Access):');
+                            console.log('Login users seeded successfully!');
+                            console.log('\nOffice Staff (Normal Access):');
                             console.log('  - rachida / rachida123');
                             console.log('  - brahim / brahim123');
                             console.log('  - touria / touria123');
-                            console.log('\n🔒 Security Staff (Security Page):');
+                            console.log('\nSecurity Staff (Security Page):');
                             console.log('  - brahimbahessi / brahimbahessi123');
                             console.log('  - mohamadbaadi / mohamadbaadi123');
                             resolvePromise();
@@ -109,11 +109,11 @@ const seedLoginUsers = () => {
 if (isDirectRun) {
   seedLoginUsers()
     .then(() => {
-      console.log('✅ Seed login users finished successfully');
+      console.log('Seed login users finished successfully');
       process.exit(0);
     })
     .catch((error) => {
-      console.error('❌ Seed login users failed:', error);
+      console.error('Seed login users failed:', error);
       process.exit(1);
     });
 }

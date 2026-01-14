@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Stock from './pages/Stock';
 import Orders from './pages/Orders';
+import PendingOrders from './pages/PendingOrders';
 import Vouchers from './pages/Vouchers';
 import Personnel from './pages/Personnel';
 import Security from './pages/Security';
@@ -45,6 +46,24 @@ function App() {
           } 
         />
         
+        {/* Bon d'Entrée and Bon de Sortie for security users (without Layout) */}
+        <Route 
+          path="/security/bon-entree" 
+          element={
+            <ProtectedRoute requireSecurity={true}>
+              <BonEntree />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/security/bon-sortie" 
+          element={
+            <ProtectedRoute requireSecurity={true}>
+              <BonSortie />
+            </ProtectedRoute>
+          } 
+        />
+        
         {/* Main app pages - protected, normal access */}
         <Route 
           path="/*" 
@@ -55,6 +74,7 @@ function App() {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/stock" element={<Stock />} />
                   <Route path="/orders" element={<Orders />} />
+                  <Route path="/pending-orders" element={<PendingOrders />} />
                   <Route path="/vouchers" element={<Vouchers />} />
                   <Route path="/personnel" element={<Personnel />} />
                   <Route path="/bon-entree" element={<BonEntree />} />

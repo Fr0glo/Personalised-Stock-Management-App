@@ -11,14 +11,22 @@
     "cleanup-db": "node database/cleanup.js",
     "reset-db": "node database/reset.js",
     "clear-stock": "node database/clearStock.js",
-    "add-indexes": "node database/addIndexes.js",
     "seed-login": "node database/seedLoginUsers.js",
-    "fix-vouchers": "node database/fixVoucherUsers.js",
     "import-data": "node database/import.js",
-    "seed-custom": "node database/seed_custom.js"
+    "seed-custom": "node database/seed_custom.js",
+    "remove-touriya": "node database/removeTouriya.js",
+    "reset-vouchers": "node database/resetVouchers.js",
+    "reset-stock": "node database/clearStock.js",
+    "reset-all": "node database/resetAll.js",
+    "backup": "node database/backup.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop stock-management-api",
+    "pm2:restart": "pm2 restart stock-management-api",
+    "pm2:logs": "pm2 logs stock-management-api"
   },
   "dependencies": {
     "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
     "sqlite3": "^5.1.6",
     "cors": "^2.8.5"
   },

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Minus, Package, User, Calendar, AlertTriangle } from 'lucide-react';
 
 const Security = () => {
@@ -7,47 +8,36 @@ const Security = () => {
   const [error, setError] = useState(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    // This would fetch orders from your backend
-    // For now, we'll use mock data - each order is a single item
-    const mockOrders = [
-      {
-        id: 1,
-        item: { name: 'Ciment 25kg', quantity: 10, unit: 'sacs' },
-        date: new Date().toISOString(),
-        status: 'pending'
-      },
-      {
-        id: 2,
-        item: { name: 'Briques', quantity: 50, unit: 'pcs' },
-        date: new Date(Date.now() - 3600000).toISOString(),
-        status: 'pending'
-      },
-      {
-        id: 3,
-        item: { name: 'Acier 6mm', quantity: 5, unit: 'tonnes' },
-        date: new Date(Date.now() - 7200000).toISOString(),
-        status: 'pending'
-      },
-      {
-        id: 4,
-        item: { name: 'Sable fin', quantity: 20, unit: 'm³' },
-        date: new Date(Date.now() - 10800000).toISOString(),
-        status: 'pending'
-      },
-      {
-        id: 5,
-        item: { name: 'Gravier', quantity: 15, unit: 'm³' },
-        date: new Date(Date.now() - 14400000).toISOString(),
-        status: 'pending'
+    const fetchOrders = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const response = await fetch('http://localhost:5000/api/orders?status=pending');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const ordersData = await response.json();
+        setOrders(ordersData);
+      } catch (err) {
+        console.error('Error fetching orders:', err);
+        setError('Failed to load orders');
+        setOrders([]);
+      } finally {
+        setIsLoading(false);
       }
-    ];
+    };
 
-    setTimeout(() => {
-      setOrders(mockOrders);
-      setIsLoading(false);
-    }, 1000);
+    fetchOrders();
+    
+    // Refresh orders every 30 seconds
+    const interval = setInterval(fetchOrders, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -157,7 +147,10 @@ const Security = () => {
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Actions Rapides</h2>
             
             {/* Bon d'Entrée Button */}
-            <button className="w-full bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl">
+            <button 
+              onClick={() => navigate('/security/bon-entree')}
+              className="w-full bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+            >
                 <div className="flex items-center justify-center space-x-4">
                     <Plus className="w-12 h-12" />
                     <div className="text-left">
@@ -170,7 +163,10 @@ const Security = () => {
            
 
             {/* Bon de Sortie Button */}
-            <button className="w-full bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl">
+            <button 
+              onClick={() => navigate('/security/bon-sortie')}
+              className="w-full bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+            >
               <div className="flex items-center justify-center space-x-4">
                 <Minus className="w-12 h-12" />
                 <div className="text-left">
@@ -227,10 +223,10 @@ const Security = () => {
                         </div>
                         <div>
                           <h3 className="text-lg font-semibold text-slate-800">
-                            {order.item.name}
+                            Commande #{order.id}
                           </h3>
                           <p className="text-sm text-slate-600">
-                            Commande #{order.id} • {formatDate(order.date)}
+                            {formatDate(order.date)}
                           </p>
                         </div>
                       </div>
@@ -241,37 +237,35 @@ const Security = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-600 mb-2">Détails de l'article</h4>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-slate-700">Quantité:</span>
-                            <span className="font-medium text-slate-800">
-                              {order.item.quantity} {order.item.unit}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-600 mb-2">Informations</h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">ID Commande:</span>
-                            <span className="font-medium">#{order.id}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Date:</span>
-                            <span className="font-medium">{formatDate(order.date)}</span>
-                          </div>
-                        </div>
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-slate-600 mb-3">Articles commandés:</h4>
+                      <div className="space-y-2">
+                        {order.items && order.items.length > 0 ? (
+                          order.items.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between text-sm bg-slate-50 p-2 rounded">
+                              <div className="flex-1">
+                                <span className="text-slate-700 font-medium">{item.name}</span>
+                                {item.place && (
+                                  <div className="text-xs text-slate-500 mt-1">
+                                    📍 Emplacement: {item.place}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-slate-800 font-medium">
+                                {item.quantity} {item.unit}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-slate-500">Aucun article</p>
+                        )}
                       </div>
                     </div>
 
                     <div className="pt-4 border-t border-slate-200">
                       <div className="flex items-center space-x-2 text-sm text-slate-600">
                         <User className="h-4 w-4" />
-                        <span>Commandé par: Bureau</span>
+                        <span>Commandé par: {order.created_by || 'Bureau'}</span>
                       </div>
                     </div>
                   </div>

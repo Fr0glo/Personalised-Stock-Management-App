@@ -21,21 +21,46 @@ router.post('/login', async (req, res) => {
       [lowerUsername, password]
     );
 
-    // If not found in users, check security staff (workers with specific usernames)
-    if (!user) {
-      // Check for security staff usernames (exact match, case-insensitive)
-      const securityUsers = {
-        'brahimbahessi': { password: 'brahimbahessi123', name: 'Brahim Bahssi' },
-        'mohamadbaadi': { password: 'mohamadbaadi123', name: 'Mohamad Baadi' }
+    // If found in users table, ensure they have a role
+    if (user) {
+      // Set default role if not present
+      if (!user.role) {
+        user.role = 'admin';
+      }
+    } else {
+      // Check for depot workers (Brahim and Mohamad)
+      const depotUsers = {
+        'brahimbahessi': { password: 'brahimbahessi123', name: 'Brahim Bahssi', id: 9999 },
+        'brahimbahessin': { password: 'brahimbahessi123', name: 'Brahim Bahssi', id: 9999 },
+        'brahimbahessine': { password: 'brahimbahessi123', name: 'Brahim Bahssi', id: 9999 },
+        'mohamadbaadi': { password: 'mohamadbaadi123', name: 'Mohamad Baadi', id: 9998 },
+        'mohamedbaadi': { password: 'mohamadbaadi123', name: 'Mohamad Baadi', id: 9998 },
+        'mohammadbaadi': { password: 'mohamadbaadi123', name: 'Mohamad Baadi', id: 9998 }
       };
 
-      if (securityUsers[lowerUsername] && password === securityUsers[lowerUsername].password) {
-        // Create user object for security staff (they don't need to exist in workers table for login)
+      const depotUser = depotUsers[lowerUsername];
+      if (depotUser && password === depotUser.password) {
+        // Create user object for depot workers
         user = {
-          user_id: lowerUsername === 'brahimbahessi' ? 9999 : 9998, // Temporary IDs
-          username: securityUsers[lowerUsername].name,
-          role: 'security'
+          user_id: depotUser.id,
+          username: depotUser.name,
+          role: 'depot'
         };
+      } else {
+        // Check for security staff
+        const securityUsers = {
+          'security': { password: 'security123', name: 'Security', id: 9997 }
+        };
+
+        const securityUser = securityUsers[lowerUsername];
+        if (securityUser && password === securityUser.password) {
+          // Create user object for security staff
+          user = {
+            user_id: securityUser.id,
+            username: securityUser.name,
+            role: 'security'
+          };
+        }
       }
     }
 

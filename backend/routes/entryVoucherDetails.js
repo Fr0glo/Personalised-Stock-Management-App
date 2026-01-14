@@ -32,17 +32,9 @@ router.get('/voucher/:voucherId', async (req, res) => {
 // Add item to entry voucher
 router.post('/', async (req, res) => {
   try {
-    const { voucher_id, item_id, quantity, unit } = req.body;
+    const { voucher_id, item_id, quantity, unit, place } = req.body;
 
-    console.log('🔍 Entry voucher details request:', req.body);
-    console.log('🔍 Validation:', {
-      voucher_id: !!voucher_id,
-      item_id: !!item_id,
-      quantity: !!quantity,
-      voucher_id_value: voucher_id,
-      item_id_value: item_id,
-      quantity_value: quantity
-    });
+    console.log('Entry voucher details request:', req.body);
 
     if (!voucher_id || !item_id || !quantity) {
       return res.status(400).json({ 
@@ -56,43 +48,51 @@ router.post('/', async (req, res) => {
     const currentStock = await getRow('SELECT quantity FROM stockItems WHERE item_id = ?', [item_id]);
     const quantityBefore = currentStock ? currentStock.quantity : 0;
     const quantityAfter = quantityBefore + Number(quantity);
+    
+    // Get added_by and taken_by from entry voucher
+    const voucherInfo = await getRow('SELECT place, added_by, taken_by FROM entryVouchers WHERE entry_id = ?', [voucher_id]);
+    
+    // Use place from request (per-item place) if provided, otherwise use voucher place, otherwise null
+    const itemPlace = place || (voucherInfo ? voucherInfo.place : null);
+    
+    // Use the taken_by worker from the voucher, or default to 1 if not specified
+    const workerId = voucherInfo && voucherInfo.taken_by ? voucherInfo.taken_by : 1;
 
-    // Insert entry detail
-    console.log('🔍 Inserting entry detail:', {
+    // Add this item to the entry voucher details
+    console.log('Inserting entry detail:', {
       entry_id: voucher_id,
       item_id: item_id,
-      worker_id: 1,
-      quantity: quantity
+      worker_id: workerId,
+      quantity: quantity,
+      place: itemPlace
     });
     
     const result = await runQuery(
       'INSERT INTO entryDetails (entry_id, item_id, worker_id, quantity) VALUES (?, ?, ?, ?)',
-      [voucher_id, item_id, 1, quantity] // Using worker_id = 1 as default
+      [voucher_id, item_id, workerId, quantity] // Use the worker from the voucher's taken_by field
     );
     
-    console.log('✅ Entry detail inserted with ID:', result.id);
+    console.log('Entry detail inserted with ID:', result.id);
 
-    // Update stock quantity
+    // Update stock quantity and place (use per-item place if provided)
     await runQuery(
-      'UPDATE stockItems SET quantity = ? WHERE item_id = ?',
-      [quantityAfter, item_id]
+      'UPDATE stockItems SET quantity = ?, place = ? WHERE item_id = ?',
+      [quantityAfter, itemPlace, item_id]
     );
-
-    // Get voucher details to find who handled it
-    const voucher = await getRow('SELECT added_by FROM entryVouchers WHERE entry_id = ?', [voucher_id]);
     
     // Log audit trail
     await runQuery(
       'INSERT INTO auditLogs (action, item_id, user_id, quantity_before, quantity_after) VALUES (?, ?, ?, ?, ?)',
-      ['entry', item_id, voucher ? voucher.added_by : 1, quantityBefore, quantityAfter]
+      ['entry', item_id, voucherInfo ? voucherInfo.added_by : 1, quantityBefore, quantityAfter]
     );
 
-    console.log('📊 Stock updated:', {
+    console.log('Stock updated:', {
       item_id,
       quantity_before: quantityBefore,
       quantity_added: quantity,
       quantity_after: quantityAfter,
-      handled_by_user: voucher ? voucher.added_by : 1
+      place: place,
+      handled_by_user: voucherInfo ? voucherInfo.added_by : 1
     });
 
     res.status(201).json({

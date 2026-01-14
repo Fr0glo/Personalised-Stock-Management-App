@@ -7,7 +7,8 @@ const __dirname = dirname(__filename);
 
 const dbPath = join(__dirname, 'stock_management.db');
 
-// Single persistent database connection (more efficient than opening/closing for each query)
+// Keep a single database connection open instead of opening/closing for each query
+// This is much more efficient and faster
 let dbInstance = null;
 
 const getDatabase = () => {
@@ -15,10 +16,23 @@ const getDatabase = () => {
     dbInstance = new sqlite3.Database(dbPath, (err) => {
       if (err) {
         console.error('Error opening database:', err.message);
+      } else {
+        // Enable WAL mode - allows multiple users to read while one writes
+        // This makes the database much faster when multiple people use it at once
+        dbInstance.run('PRAGMA journal_mode = WAL', (err) => {
+          if (err) {
+            console.error('Error enabling WAL mode:', err.message);
+          } else {
+            console.log('WAL mode enabled - database ready for concurrent access');
+          }
+        });
+        // Optimize database performance settings
+        dbInstance.run('PRAGMA synchronous = NORMAL'); // Balance between speed and safety
+        dbInstance.run('PRAGMA cache_size = 10000'); // Cache more data in memory for faster queries
+        // Enable foreign key constraints to keep data relationships valid
+        dbInstance.run('PRAGMA foreign_keys = ON');
       }
     });
-    // Enable foreign keys
-    dbInstance.run('PRAGMA foreign_keys = ON');
   }
   return dbInstance;
 };

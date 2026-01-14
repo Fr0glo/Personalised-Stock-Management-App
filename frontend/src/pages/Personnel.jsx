@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, User, Package, Search, Eye, Plus, Minus, FileText, Badge } from 'lucide-react';
+import { Users, User, Package, Search, Eye, Plus, Minus, FileText, Badge, Trash2, X } from 'lucide-react';
 
 const BUREAU_TEAM = [
   {
@@ -15,29 +15,26 @@ const BUREAU_TEAM = [
   {
     id: 'brahim-bureau',
     displayName: 'Brahim',
-    aliases: ['brahim', 'brahim bahessin', 'brahim bahessi', 'brahim bahessine']
+    aliases: ['brahim', 'brahim bahessin', 'brahim bahessi', 'brahim bahessine', 'brahim bahssi']
   }
 ];
 
-const DEPOT_TEAM = [
+const SECURITY_TEAM = [
   {
-    id: 'brahim-bahessin',
-    displayName: 'Brahim Bahessin',
-    aliases: ['brahim bahessin', 'brahim bahessi', 'brahim bahessine']
-  },
-  {
-    id: 'mohamad-baadi',
-    displayName: 'Mohamad Baadi',
-    aliases: ['mohamad baadi', 'mohamed baadi', 'mohammed baadi', 'mohammad baadi']
+    id: 'security',
+    displayName: 'Security',
+    aliases: ['security']
   }
 ];
 
 const Personnel = () => {
   const [workers, setWorkers] = useState([]);
+  const [users, setUsers] = useState([]);
   const [entryVouchers, setEntryVouchers] = useState([]);
   const [exitVouchers, setExitVouchers] = useState([]);
   const [bureauStaff, setBureauStaff] = useState([]);
   const [depotStaff, setDepotStaff] = useState([]);
+  const [securityStaff, setSecurityStaff] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,6 +43,8 @@ const Personnel = () => {
   const [workerVouchers, setWorkerVouchers] = useState([]);
   const [selectedStaffMember, setSelectedStaffMember] = useState(null);
   const [showStaffDetails, setShowStaffDetails] = useState(false);
+  const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
+  const [newWorker, setNewWorker] = useState({ F_Name: '', Surname: '', Carte_National: '', Role: '' });
 
   const toTitleCase = (value) => {
     if (!value) return '';
@@ -94,6 +93,20 @@ const Personnel = () => {
     });
   };
 
+  const matchesSecurityStaff = (voucher, staff) => {
+    const candidates = [
+      voucher.added_by_name,
+      voucher.handled_by_name
+    ];
+
+    return candidates.some(name => {
+      const normalized = normalizeName(name);
+      if (!normalized) return false;
+      if (normalized === normalizeName(staff.displayName)) return true;
+      return (staff.aliases || []).some(alias => alias === normalized);
+    });
+  };
+
   const buildStaffSummaries = (team, matcher, entryList, exitList, role) => {
     return team.map(staff => {
       const entryMatches = entryList.filter(voucher => matcher(voucher, staff));
@@ -122,8 +135,9 @@ const Personnel = () => {
         setIsLoading(true);
         setError(null);
 
-        const [workersResponse, entryResponse, exitResponse] = await Promise.all([
+        const [workersResponse, usersResponse, entryResponse, exitResponse] = await Promise.all([
           fetch('http://localhost:5000/api/workers'),
+          fetch('http://localhost:5000/api/users'),
           fetch('http://localhost:5000/api/entry-vouchers'),
           fetch('http://localhost:5000/api/exit-vouchers')
         ]);
@@ -134,6 +148,25 @@ const Personnel = () => {
 
         const workersData = await workersResponse.json();
         setWorkers(workersData);
+
+        // Fetch users (Rachida, Touria, Brahim)
+        if (usersResponse.ok) {
+          const usersData = await usersResponse.json();
+          // Filter to show only bureau/admin users (Rachida, Touria, Brahim)
+          // Remove duplicates and normalize names (remove Touriya, keep only Touria)
+          const bureauUsers = usersData.filter(u => {
+            const username = u.username.toLowerCase();
+            // Exclude Touriya (keep only Touria)
+            if (username === 'touriya') return false;
+            return u.role === 'admin' || username === 'rachida' || 
+                   username === 'touria' || username === 'brahim';
+          });
+          // Remove duplicates by username (normalized)
+          const uniqueUsers = bureauUsers.filter((user, index, self) =>
+            index === self.findIndex(u => u.username.toLowerCase() === user.username.toLowerCase())
+          );
+          setUsers(uniqueUsers);
+        }
 
         let entryData = [];
         let exitData = [];
@@ -152,8 +185,31 @@ const Personnel = () => {
 
         setEntryVouchers(entryData);
         setExitVouchers(exitData);
-        setBureauStaff(buildStaffSummaries(BUREAU_TEAM, matchesBureauStaff, entryData, exitData, 'bureau'));
-        setDepotStaff(buildStaffSummaries(DEPOT_TEAM, matchesDepotStaff, entryData, exitData, 'depot'));
+        
+        // Build bureau team: hardcoded members + workers with Role="bureau"
+        const bureauWorkers = workersData.filter(w => 
+          w.Role && w.Role.toLowerCase().includes('bureau')
+        ).map(w => ({
+          id: `worker-${w.worker_id}`,
+          displayName: `${w.F_Name} ${w.Surname}`,
+          aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
+        }));
+        const allBureauTeam = [...BUREAU_TEAM, ...bureauWorkers];
+        setBureauStaff(buildStaffSummaries(allBureauTeam, matchesBureauStaff, entryData, exitData, 'bureau'));
+        
+        // Build depot team: workers with Role containing "depot", "worker", or similar
+        const depotWorkers = workersData.filter(w => {
+          const role = (w.Role || '').toLowerCase();
+          return role.includes('depot') || role.includes('worker') || role.includes('dépôt') || 
+                 (!role.includes('bureau') && !role.includes('security') && w.Role);
+        }).map(w => ({
+          id: `worker-${w.worker_id}`,
+          displayName: `${w.F_Name} ${w.Surname}`,
+          aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
+        }));
+        setDepotStaff(buildStaffSummaries(depotWorkers, matchesDepotStaff, entryData, exitData, 'depot'));
+        
+        setSecurityStaff(buildStaffSummaries(SECURITY_TEAM, matchesSecurityStaff, entryData, exitData, 'security'));
       } catch (err) {
         console.error('Error fetching personnel data:', err);
         setError('Failed to load personnel data');
@@ -236,11 +292,211 @@ const Personnel = () => {
     });
   };
 
-  const filteredWorkers = workers.filter(worker => 
-    `${worker.F_Name} ${worker.Surname}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    worker.Role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    worker.Carte_National?.includes(searchTerm)
+  // Combine workers and users for display
+  const allPersonnel = [
+    ...users.map(user => ({
+      id: `user-${user.user_id}`,
+      type: 'user',
+      displayName: toTitleCase(user.username),
+      F_Name: user.username.split(' ')[0] || user.username,
+      Surname: user.username.split(' ').slice(1).join(' ') || '',
+      Role: user.role || 'admin',
+      Carte_National: null,
+      user_id: user.user_id
+    })),
+    ...workers.map(worker => ({
+      ...worker,
+      id: `worker-${worker.worker_id}`,
+      type: 'worker',
+      displayName: `${worker.F_Name} ${worker.Surname}`
+    }))
+  ];
+
+  const filteredPersonnel = allPersonnel.filter(person => 
+    person.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    person.Role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    person.Carte_National?.includes(searchTerm) ||
+    (person.F_Name && person.F_Name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (person.Surname && person.Surname.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  // Add new worker
+  const addWorker = async () => {
+    if (!newWorker.F_Name.trim() || !newWorker.Surname.trim()) {
+      alert('Le prénom et le nom sont requis');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:5000/api/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newWorker)
+      });
+
+      if (!response.ok) throw new Error('Failed to add worker');
+
+      const addedWorker = await response.json();
+      setWorkers(prev => [...prev, addedWorker]);
+      
+      // Refresh vouchers and users to update team sections
+      const [usersResponse, entryResponse, exitResponse] = await Promise.all([
+        fetch('http://localhost:5000/api/users'),
+        fetch('http://localhost:5000/api/entry-vouchers'),
+        fetch('http://localhost:5000/api/exit-vouchers')
+      ]);
+
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        // Filter and remove duplicates (exclude Touriya, keep only Touria)
+        const bureauUsers = usersData.filter(u => {
+          const username = u.username.toLowerCase();
+          if (username === 'touriya') return false;
+          return u.role === 'admin' || username === 'rachida' || 
+                 username === 'touria' || username === 'brahim';
+        });
+        // Remove duplicates by username (normalized)
+        const uniqueUsers = bureauUsers.filter((user, index, self) =>
+          index === self.findIndex(u => u.username.toLowerCase() === user.username.toLowerCase())
+        );
+        setUsers(uniqueUsers);
+      }
+
+      let entryData = [];
+      let exitData = [];
+
+      if (entryResponse.ok) {
+        entryData = await entryResponse.json();
+      }
+      if (exitResponse.ok) {
+        exitData = await exitResponse.json();
+      }
+
+      setEntryVouchers(entryData);
+      setExitVouchers(exitData);
+      
+      // Rebuild teams with new worker
+      const updatedWorkers = [...workers, addedWorker];
+      const bureauWorkers = updatedWorkers.filter(w => 
+        w.Role && w.Role.toLowerCase().includes('bureau')
+      ).map(w => ({
+        id: `worker-${w.worker_id}`,
+        displayName: `${w.F_Name} ${w.Surname}`,
+        aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
+      }));
+      const allBureauTeam = [...BUREAU_TEAM, ...bureauWorkers];
+      setBureauStaff(buildStaffSummaries(allBureauTeam, matchesBureauStaff, entryData, exitData, 'bureau'));
+      
+      const depotWorkers = updatedWorkers.filter(w => {
+        const role = (w.Role || '').toLowerCase();
+        return role.includes('depot') || role.includes('worker') || role.includes('dépôt') || 
+               (!role.includes('bureau') && !role.includes('security') && w.Role);
+      }).map(w => ({
+        id: `worker-${w.worker_id}`,
+        displayName: `${w.F_Name} ${w.Surname}`,
+        aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
+      }));
+      setDepotStaff(buildStaffSummaries(depotWorkers, matchesDepotStaff, entryData, exitData, 'depot'));
+      
+      setShowAddWorkerModal(false);
+      setNewWorker({ F_Name: '', Surname: '', Carte_National: '', Role: '' });
+    } catch (error) {
+      console.error('Error adding worker:', error);
+      alert('Erreur lors de l\'ajout du travailleur');
+    }
+  };
+
+  // Delete worker
+  const deleteWorker = async (workerId) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce travailleur?')) return;
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/workers/${workerId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete worker');
+      }
+
+      // Remove from state
+      setWorkers(prev => prev.filter(worker => worker.worker_id !== workerId));
+      
+      // Refresh data to update team sections
+      const [workersResponse, usersResponse, entryResponse, exitResponse] = await Promise.all([
+        fetch('http://localhost:5000/api/workers'),
+        fetch('http://localhost:5000/api/users'),
+        fetch('http://localhost:5000/api/entry-vouchers'),
+        fetch('http://localhost:5000/api/exit-vouchers')
+      ]);
+
+      if (workersResponse.ok) {
+        const workersData = await workersResponse.json();
+        setWorkers(workersData);
+      }
+
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        // Filter and remove duplicates (exclude Touriya, keep only Touria)
+        const bureauUsers = usersData.filter(u => {
+          const username = u.username.toLowerCase();
+          if (username === 'touriya') return false;
+          return u.role === 'admin' || username === 'rachida' || 
+                 username === 'touria' || username === 'brahim';
+        });
+        // Remove duplicates by username (normalized)
+        const uniqueUsers = bureauUsers.filter((user, index, self) =>
+          index === self.findIndex(u => u.username.toLowerCase() === user.username.toLowerCase())
+        );
+        setUsers(uniqueUsers);
+      }
+
+      let entryData = [];
+      let exitData = [];
+
+      if (entryResponse.ok) {
+        entryData = await entryResponse.json();
+      }
+      if (exitResponse.ok) {
+        exitData = await exitResponse.json();
+      }
+
+      setEntryVouchers(entryData);
+      setExitVouchers(exitData);
+      
+      // Rebuild teams
+      if (workersResponse.ok) {
+        const workersData = await workersResponse.json();
+        const bureauWorkers = workersData.filter(w => 
+          w.Role && w.Role.toLowerCase().includes('bureau')
+        ).map(w => ({
+          id: `worker-${w.worker_id}`,
+          displayName: `${w.F_Name} ${w.Surname}`,
+          aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
+        }));
+        const allBureauTeam = [...BUREAU_TEAM, ...bureauWorkers];
+        setBureauStaff(buildStaffSummaries(allBureauTeam, matchesBureauStaff, entryData, exitData, 'bureau'));
+        
+        const depotWorkers = workersData.filter(w => {
+          const role = (w.Role || '').toLowerCase();
+          return role.includes('depot') || role.includes('worker') || role.includes('dépôt') || 
+                 (!role.includes('bureau') && !role.includes('security') && w.Role);
+        }).map(w => ({
+          id: `worker-${w.worker_id}`,
+          displayName: `${w.F_Name} ${w.Surname}`,
+          aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
+        }));
+        setDepotStaff(buildStaffSummaries(depotWorkers, matchesDepotStaff, entryData, exitData, 'depot'));
+      }
+    } catch (error) {
+      console.error('Error deleting worker:', error);
+      alert(`Erreur lors de la suppression du travailleur: ${error.message}`);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -274,21 +530,30 @@ const Personnel = () => {
       <div>
         <h1 className="text-3xl font-bold text-slate-800">Personnel</h1>
         <p className="text-slate-600 mt-2">
-          {workers.length} travailleur{workers.length !== 1 ? 's' : ''} enregistré{workers.length !== 1 ? 's' : ''}
+          {allPersonnel.length} membre{allPersonnel.length !== 1 ? 's' : ''} du personnel
         </p>
       </div>
 
-      {/* Search Bar */}
+      {/* Search Bar and Add Button */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <div className="relative">
-          <Search className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Rechercher un travailleur..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-          />
+        <div className="flex gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Rechercher un travailleur..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+            />
+          </div>
+          <button
+            onClick={() => setShowAddWorkerModal(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Ajouter un travailleur
+          </button>
         </div>
       </div>
 
@@ -434,23 +699,102 @@ const Personnel = () => {
         </div>
       )}
 
-      {/* Workers List */}
-      {filteredWorkers.length === 0 ? (
-        <div className="bg-white p-12 rounded-xl shadow-sm border border-slate-200 text-center">
-          <Users className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">Aucun travailleur trouvé</h3>
-          <p className="text-slate-500">
-            {searchTerm 
-              ? 'Essayez de modifier vos critères de recherche' 
-              : 'Aucun travailleur enregistré pour le moment'
-            }
-          </p>
+      {/* Security Team Section */}
+      {securityStaff.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800">Équipe Sécurité</h2>
+              <p className="text-slate-600 mt-1">
+                {securityStaff.reduce((sum, staff) => sum + staff.total, 0)} bon{securityStaff.reduce((sum, staff) => sum + staff.total, 0) !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            {securityStaff.map((staff) => (
+              <div
+                key={staff.id}
+                className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-300"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-800">
+                        {toTitleCase(staff.displayName)}
+                      </h3>
+                    </div>
+                    <div className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-medium">
+                      {staff.total} bon{staff.total !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="flex items-center gap-1 text-emerald-600">
+                      <Plus className="h-4 w-4" />
+                      {staff.entryCount}
+                    </span>
+                    <span className="flex items-center gap-1 text-red-600">
+                      <Minus className="h-4 w-4" />
+                      {staff.exitCount}
+                    </span>
+                  </div>
+
+                  {staff.total > 0 ? (
+                    <p className="text-xs text-slate-500 mt-3">
+                      Dernier bon: {formatDate(staff.vouchers[0].date)}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-500 mt-3">
+                      Aucun bon enregistré pour le moment
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <button
+                    onClick={() => openStaffDetails(staff)}
+                    disabled={staff.total === 0}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Voir les bons
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      ) : (
+      )}
+
+      {/* All Personnel Section - Show at bottom */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Tout le Personnel</h2>
+            <p className="text-slate-600 mt-1">
+              Liste complète de tous les travailleurs
+            </p>
+          </div>
+        </div>
+
+        {/* Personnel List */}
+        {filteredPersonnel.length === 0 ? (
+          <div className="bg-white p-12 rounded-xl shadow-sm border border-slate-200 text-center">
+            <Users className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-600 mb-2">Aucun personnel trouvé</h3>
+            <p className="text-slate-500">
+              {searchTerm 
+                ? 'Essayez de modifier vos critères de recherche' 
+                : 'Aucun personnel enregistré pour le moment'
+              }
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredWorkers.map((worker) => (
+          {filteredPersonnel.map((person) => (
             <div
-              key={worker.worker_id}
+              key={person.id}
               className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow duration-300 overflow-hidden"
             >
               <div className="p-6">
@@ -461,9 +805,11 @@ const Personnel = () => {
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-slate-800">
-                        {worker.F_Name} {worker.Surname}
+                        {person.displayName}
                       </h3>
-                      <p className="text-sm text-slate-600">ID: {worker.worker_id}</p>
+                      <p className="text-sm text-slate-600">
+                        {person.type === 'user' ? 'Utilisateur' : 'Travailleur'} • ID: {person.type === 'user' ? person.user_id : person.worker_id}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -473,33 +819,52 @@ const Personnel = () => {
                     <Badge className="h-4 w-4 text-slate-400" />
                     <span className="text-sm text-slate-600">Rôle:</span>
                     <span className="text-sm font-medium text-slate-700 bg-slate-100 px-2 py-1 rounded">
-                      {worker.Role || 'Non spécifié'}
+                      {person.Role ? toTitleCase(person.Role) : 'Non spécifié'}
                     </span>
                   </div>
                   
-                  {worker.Carte_National && (
+                  {person.Carte_National && (
                     <div className="flex items-center space-x-2">
                       <FileText className="h-4 w-4 text-slate-400" />
                       <span className="text-sm text-slate-600">Carte National:</span>
                       <span className="text-sm font-medium text-slate-700">
-                        {worker.Carte_National}
+                        {person.Carte_National}
                       </span>
                     </div>
                   )}
                 </div>
 
-                <button
-                  onClick={() => showWorkerInfo(worker)}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
-                >
-                  <Eye className="h-4 w-4" />
-                  <span>Voir l'historique</span>
-                </button>
+                <div className="flex gap-2">
+                  {person.type === 'worker' && (
+                    <>
+                      <button
+                        onClick={() => showWorkerInfo(person)}
+                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span>Voir l'historique</span>
+                      </button>
+                      <button
+                        onClick={() => deleteWorker(person.worker_id)}
+                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                        title="Supprimer le travailleur"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                  {person.type === 'user' && (
+                    <div className="w-full text-center text-sm text-slate-500 py-2">
+                      Membre du bureau
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
         </div>
-      )}
+        )}
+      </div>
 
       {/* Worker Details Modal */}
       {showWorkerDetails && selectedWorker && (
@@ -775,6 +1140,100 @@ const Personnel = () => {
                   <p className="text-slate-500">Ce membre du bureau n'a pas encore géré de bons.</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Worker Modal */}
+      {showAddWorkerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl p-8 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-slate-800">Ajouter un travailleur</h2>
+              <button
+                onClick={() => {
+                  setShowAddWorkerModal(false);
+                  setNewWorker({ F_Name: '', Surname: '', Carte_National: '', Role: '' });
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Prénom *
+                  </label>
+                  <input
+                    type="text"
+                    value={newWorker.F_Name}
+                    onChange={(e) => setNewWorker(prev => ({ ...prev, F_Name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Prénom"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Nom *
+                  </label>
+                  <input
+                    type="text"
+                    value={newWorker.Surname}
+                    onChange={(e) => setNewWorker(prev => ({ ...prev, Surname: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Nom"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Carte National
+                </label>
+                <input
+                  type="text"
+                  value={newWorker.Carte_National}
+                  onChange={(e) => setNewWorker(prev => ({ ...prev, Carte_National: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Numéro de carte nationale (optionnel)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Rôle
+                </label>
+                <input
+                  type="text"
+                  value={newWorker.Role}
+                  onChange={(e) => setNewWorker(prev => ({ ...prev, Role: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ex: Worker, Security, Foreman..."
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddWorkerModal(false);
+                  setNewWorker({ F_Name: '', Surname: '', Carte_National: '', Role: '' });
+                }}
+                className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={addWorker}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Ajouter
+              </button>
             </div>
           </div>
         </div>

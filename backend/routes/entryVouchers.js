@@ -58,7 +58,10 @@ router.get('/', async (req, res) => {
 
     const vouchers = await getAll(`
       SELECT ev.*, 
-             COALESCE(u.username, 'Utilisateur supprimé') as added_by_name,
+             CASE 
+               WHEN ev.added_by = 9997 THEN 'Security'
+               ELSE COALESCE(u.username, 'Utilisateur supprimé')
+             END as added_by_name,
              w.F_Name as taken_by_first_name,
              w.Surname as taken_by_last_name
       FROM entryVouchers ev 
@@ -143,19 +146,20 @@ router.post('/', async (req, res) => {
     
     await ensureEntryVoucherSchema();
 
-    console.log('🔍 Creating entry voucher with data:', req.body);
+    console.log('Creating entry voucher with data:', req.body);
     
     if (!handled_by) {
       return res.status(400).json({ error: 'Handled by is required' });
     }
     
-    // Convert username to user_id for handled_by
+    // Look up the user ID from the username
     const handledByUser = await getRow('SELECT user_id FROM users WHERE username = ?', [handled_by]);
     if (!handledByUser) {
       return res.status(400).json({ error: 'Invalid handled_by user' });
     }
     
-    // Convert worker name to worker_id for taken_by (if provided)
+    // Look up the worker ID from the worker's name if provided
+    // Split the name into first and last name to search properly
     let takenByWorkerId = null;
     if (taken_by) {
       const nameParts = taken_by.trim().split(' ');
@@ -172,12 +176,12 @@ router.post('/', async (req, res) => {
       }
     }
     
-    console.log('🔍 Converted IDs:', {
+    console.log('Converted user and worker names to IDs:', {
       handled_by_user_id: handledByUser.user_id,
       taken_by_worker_id: takenByWorkerId
     });
     
-    // Create entry voucher with extended details
+    // Create the entry voucher record in the database
     const voucherResult = await runQuery(
       'INSERT INTO entryVouchers (voucher_number, date, added_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
       [
@@ -190,7 +194,7 @@ router.post('/', async (req, res) => {
       ]
     );
     
-    console.log('✅ Entry voucher created with ID:', voucherResult.id);
+    console.log('Entry voucher created with ID:', voucherResult.id);
     
     res.status(201).json({ 
       voucher_id: voucherResult.id, 

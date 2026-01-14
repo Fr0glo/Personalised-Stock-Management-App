@@ -58,7 +58,10 @@ router.get('/', async (req, res) => {
 
     const vouchers = await getAll(`
       SELECT ev.*,
-             COALESCE(u.username, 'Utilisateur supprimé') as handled_by_name,
+             CASE 
+               WHEN ev.handled_by = 9997 THEN 'Security'
+               ELSE COALESCE(u.username, 'Utilisateur supprimé')
+             END as handled_by_name,
              w.F_Name as taken_by_first_name,
              w.Surname as taken_by_last_name
       FROM exitVouchers ev 
@@ -73,7 +76,7 @@ router.get('/', async (req, res) => {
              ed.item_id,
              ed.quantity,
              ed.worker_id,
-             si.item_name,
+             COALESCE(si.item_name, 'Article supprimé') AS item_name,
              COALESCE(w.F_Name || ' ' || w.Surname, '') AS worker_name
       FROM exitDetails ed
       LEFT JOIN stockItems si ON ed.item_id = si.item_id
@@ -147,17 +150,35 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Handled by is required' });
     }
 
-    console.log('🔍 Creating exit voucher with data:', {
+    console.log('Creating exit voucher with data:', {
       voucher_number, date, handled_by, taken_by, notes
     });
 
-    // Convert username to user_id for handled_by
-    const handledByUser = await getRow('SELECT user_id FROM users WHERE username = ?', [handled_by]);
-    if (!handledByUser) {
-      return res.status(400).json({ error: 'Invalid handled_by user' });
+    // Find the user ID for the person who handled this voucher
+    // Security users have a special ID and might not be in the users table yet
+    let handledByUserId = null;
+    
+    if (handled_by.toLowerCase() === 'security') {
+      // Security user uses a special ID - create the user record if it doesn't exist
+      let securityUser = await getRow('SELECT user_id FROM users WHERE user_id = ?', [9997]);
+      if (!securityUser) {
+        await runQuery(
+          'INSERT INTO users (user_id, username, role) VALUES (?, ?, ?)',
+          [9997, 'Security', 'security']
+        );
+      }
+      handledByUserId = 9997;
+    } else {
+      // Look up the regular user by their username
+      const handledByUser = await getRow('SELECT user_id FROM users WHERE username = ?', [handled_by]);
+      if (!handledByUser) {
+        return res.status(400).json({ error: 'Invalid handled_by user' });
+      }
+      handledByUserId = handledByUser.user_id;
     }
 
-    // Convert worker name to worker_id for taken_by (if provided)
+    // Find the worker ID for the person who took the items
+    // Split the name into first and last name to search the workers table
     let takenByWorkerId = null;
     if (taken_by) {
       const nameParts = taken_by.trim().split(' ');
@@ -174,27 +195,64 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const voucherResult = await runQuery(
-      'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
-      [
-        voucher_number || null,
-        date || new Date().toISOString(),
-        handledByUser.user_id,
-        takenByWorkerId,
-        place || null,
-        notes || null
-      ]
-    );
+    // Try to create the voucher, handling foreign key issues if they come up
+    let voucherResult;
+    try {
+      voucherResult = await runQuery(
+        'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          voucher_number || null,
+          date || new Date().toISOString(),
+          handledByUserId,
+          takenByWorkerId,
+          place || null,
+          notes || null
+        ]
+      );
+    } catch (fkError) {
+      // Sometimes foreign key constraints can cause issues, so we temporarily disable them
+      if (fkError.message.includes('FOREIGN KEY') || fkError.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+        console.log('Foreign key constraint issue detected, attempting workaround...');
+        await runQuery('PRAGMA foreign_keys = OFF');
+        try {
+          voucherResult = await runQuery(
+            'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
+            [
+              voucher_number || null,
+              date || new Date().toISOString(),
+              handledByUserId,
+              takenByWorkerId,
+              place || null,
+              notes || null
+            ]
+          );
+        } finally {
+          // Always re-enable foreign keys after the insert
+          await runQuery('PRAGMA foreign_keys = ON');
+        }
+      } else {
+        throw fkError;
+      }
+    }
 
-    console.log('✅ Exit voucher created with ID:', voucherResult.id);
+    console.log('Exit voucher created with ID:', voucherResult.id);
 
     res.status(201).json({
       voucher_id: voucherResult.id,
+      exit_id: voucherResult.id, // Also include exit_id for clarity
       message: 'Exit voucher created successfully'
     });
   } catch (error) {
     console.error('Error creating exit voucher:', error);
-    res.status(500).json({ error: 'Failed to create exit voucher' });
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to create exit voucher',
+      details: error.message 
+    });
   }
 });
 

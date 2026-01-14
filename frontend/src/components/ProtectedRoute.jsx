@@ -1,7 +1,8 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
 const ProtectedRoute = ({ children, requireSecurity = false }) => {
+  const location = useLocation();
   const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
   const userStr = localStorage.getItem('user');
   const user = userStr ? JSON.parse(userStr) : null;
@@ -16,8 +17,17 @@ const ProtectedRoute = ({ children, requireSecurity = false }) => {
   }
 
   // If user is security but trying to access normal pages, redirect to security
+  // Exception: allow access to security-specific bon-entree and bon-sortie routes
   if (user.role === 'security' && !requireSecurity) {
-    return <Navigate to="/security" replace />;
+    const currentPath = location.pathname;
+    if (currentPath !== '/security/bon-entree' && currentPath !== '/security/bon-sortie') {
+      return <Navigate to="/security" replace />;
+    }
+  }
+
+  // Depot workers can access normal pages but not security page
+  if (user.role === 'depot' && requireSecurity) {
+    return <Navigate to="/" replace />;
   }
 
   return children;

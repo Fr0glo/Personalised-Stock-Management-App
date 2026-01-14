@@ -7,7 +7,8 @@ import {
   ShoppingCart,
   LayoutDashboard,
   User,
-  LogOut
+  LogOut,
+  Clock
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -55,6 +56,7 @@ const Sidebar = () => {
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/stock', label: 'Stock', icon: Package },
     { path: '/orders', label: 'Commander', icon: ShoppingCart },
+    { path: '/pending-orders', label: 'Commandes en Attente', icon: Clock },
     { path: '/vouchers', label: 'Les bons', icon: FileText },
     { path: '/personnel', label: 'Personnel', icon: Users },
   ];

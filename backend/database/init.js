@@ -147,6 +147,29 @@ const createTables = () => {
         )
       `);
 
+      // Orders table (posted orders from Commander page)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS orders (
+          order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date DATETIME DEFAULT CURRENT_TIMESTAMP,
+          status TEXT DEFAULT 'pending',
+          created_by INTEGER NOT NULL,
+          FOREIGN KEY (created_by) REFERENCES users (user_id)
+        )
+      `);
+
+      // OrderItems table (items in orders)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS orderItems (
+          order_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          item_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          unit TEXT NOT NULL,
+          FOREIGN KEY (order_id) REFERENCES orders (order_id)
+        )
+      `);
+
       db.run('PRAGMA foreign_keys = ON');
     });
 
@@ -176,7 +199,7 @@ const seedData = async () => {
         }
         
         if (row.count > 0) {
-          console.log('⚠️  Data already exists, skipping seed...');
+          console.log('Data already exists, skipping seed...');
           db.close((err) => {
             if (err) reject(err);
             else resolve();
@@ -286,16 +309,16 @@ const seedData = async () => {
 // Main execution
 const initDatabase = async () => {
   try {
-    console.log('🗄️  Creating database tables...');
+    console.log('Creating database tables...');
     await createTables();
-    console.log('✅ Database tables created successfully');
+    console.log('Database tables created successfully');
     
-    console.log('🌱 Seeding initial data...');
+    console.log('Seeding initial data...');
     await seedData();
-    console.log('✅ Initial data seeded successfully');
+    console.log('Initial data seeded successfully');
     
-    console.log('🎉 Database initialization completed!');
-    console.log('\n📊 Sample data created:');
+    console.log('Database initialization completed!');
+    console.log('\nSample data created:');
     console.log('- 3 users (admin, staff1, staff2)');
     console.log('- 3 workers (Ahmed, Mohammed, Ali)');
     console.log('- 5 stock items (Ciment, Briques, Acier, Sable, Gravier)');
@@ -303,7 +326,7 @@ const initDatabase = async () => {
     console.log('- 1 exit voucher with details');
     console.log('- 2 audit log entries');
   } catch (error) {
-    console.error('❌ Error initializing database:', error);
+    console.error('Error initializing database:', error);
   }
 };
 

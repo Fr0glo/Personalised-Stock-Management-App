@@ -17,8 +17,8 @@ const Orders = () => {
         setIsLoading(true);
         setError(null);
         
-        // Limit to 500 items for performance
-        const response = await fetch('http://localhost:5000/api/stock-items?limit=500');
+        // Limit to 500 items for performance, include pending quantities
+        const response = await fetch('http://localhost:5000/api/stock-items?limit=500&includePending=true');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -103,13 +103,14 @@ const Orders = () => {
       return;
     }
     
-    // Find the stock item to check available quantity
+    // Find the stock item to check available quantity (accounting for pending orders)
     const stockItem = stockItems.find(item => item.item_id === itemId);
-    if (stockItem && newQuantity > stockItem.quantity) {
+    const availableQuantity = stockItem ? (stockItem.quantity - (stockItem.pending_quantity || 0)) : 0;
+    if (stockItem && newQuantity > availableQuantity) {
       // Set error for this item
       setOrderErrors(prev => ({
         ...prev,
-        [itemId]: `Quantité demandée (${newQuantity}) dépasse le stock disponible (${stockItem.quantity})`
+        [itemId]: `Quantité demandée (${newQuantity}) dépasse le stock disponible (${availableQuantity})`
       }));
       // Still update the quantity to show what user typed
       setOrderItems(orderItems.map(item => 
@@ -135,19 +136,55 @@ const Orders = () => {
   };
 
   // Confirm order
-  const confirmOrder = () => {
+  const confirmOrder = async () => {
     // Check if there are any errors before confirming
     if (Object.keys(orderErrors).length > 0) {
       alert('Veuillez corriger les erreurs avant de confirmer la commande.');
       return;
     }
     
-    console.log('Order confirmed:', orderItems);
-    // Here you would typically send the order to your backend
-    alert(`Commande confirmée pour ${orderItems.length} article(s)!`);
-    setOrderItems([]);
-    setShowConfirmButton(false);
-    setOrderErrors({});
+    try {
+      // Get logged in user
+      const userStr = localStorage.getItem('user');
+      const user = userStr ? JSON.parse(userStr) : null;
+      
+      if (!user || !user.username) {
+        alert('Vous devez être connecté pour créer une commande.');
+        return;
+      }
+
+      // Prepare order items
+      const items = orderItems.map(item => ({
+        item_name: item.item_name,
+        orderQuantity: typeof item.orderQuantity === 'number' ? item.orderQuantity : parseInt(item.orderQuantity) || 1,
+        unit: item.unit
+      }));
+
+      // Send order to backend
+      const response = await fetch('http://localhost:5000/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          items,
+          created_by: user.username
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create order');
+      }
+
+      alert(`Commande confirmée pour ${orderItems.length} article(s)!`);
+      setOrderItems([]);
+      setShowConfirmButton(false);
+      setOrderErrors({});
+    } catch (error) {
+      console.error('Error confirming order:', error);
+      alert(`Erreur lors de la création de la commande: ${error.message}`);
+    }
   };
 
   // Calculate total items in order
@@ -284,11 +321,25 @@ const Orders = () => {
                 {/* Card Body */}
                 <div className="p-4 space-y-3">
                   {/* Quantity */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Quantité</span>
-                    <span className="text-2xl font-bold text-slate-800">
-                      {item.quantity}
-                    </span>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Quantité disponible</span>
+                      <span className="text-2xl font-bold text-slate-800">
+                        {item.quantity - (item.pending_quantity || 0)}
+                      </span>
+                    </div>
+                    {item.pending_quantity > 0 && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500">En attente</span>
+                        <span className="text-orange-600 font-medium">
+                          {item.pending_quantity} en commande
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>Stock total</span>
+                      <span>{item.quantity}</span>
+                    </div>
                   </div>
 
                   {/* Unit */}
@@ -298,6 +349,16 @@ const Orders = () => {
                       {item.unit}
                     </span>
                   </div>
+
+                  {/* Place */}
+                  {item.place && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Emplacement</span>
+                      <span className="text-sm font-medium text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
+                        {item.place}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Notes */}
                   {item.notes && (

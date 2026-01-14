@@ -3,20 +3,69 @@ import { getAll, getRow, runQuery } from '../database/connection.js';
 
 const router = express.Router();
 
-// GET all stock items (only items with actual stock)
+// Ensure stockItems schema has is_deleted column
+let stockSchemaEnsured = false;
+
+const ensureStockItemsSchema = async () => {
+  if (stockSchemaEnsured) return;
+
+  try {
+    const columns = await getAll('PRAGMA table_info(stockItems)');
+    const columnNames = columns.map(col => col.name);
+
+    if (!columnNames.includes('is_deleted')) {
+      await runQuery('ALTER TABLE stockItems ADD COLUMN is_deleted INTEGER DEFAULT 0');
+    }
+
+    if (!columnNames.includes('place')) {
+      await runQuery('ALTER TABLE stockItems ADD COLUMN place TEXT');
+    }
+
+    stockSchemaEnsured = true;
+  } catch (error) {
+    console.error('Error ensuring stockItems schema:', error);
+    // Continue anyway - COALESCE will handle missing column
+  }
+};
+
+// GET all stock items (only items with actual stock by default)
 router.get('/', async (req, res) => {
   try {
-    const { search, limit = 100 } = req.query; // Default limit of 100 for performance
-    let query = 'SELECT * FROM stockItems WHERE quantity > 0';
+    await ensureStockItemsSchema();
+    
+    const { search, limit = 100, includeZero = false, includePending = false } = req.query; // Default limit of 100 for performance
+    // Exclude soft-deleted items from normal queries
+    let query = includeZero === 'true' 
+      ? 'SELECT si.* FROM stockItems si WHERE COALESCE(si.is_deleted, 0) = 0' 
+      : 'SELECT si.* FROM stockItems si WHERE si.quantity > 0 AND COALESCE(si.is_deleted, 0) = 0';
     let params = [];
 
     // Add search functionality
     if (search) {
-      query += ' AND item_name LIKE ?';
+      query += ' AND si.item_name LIKE ?';
       params.push(`%${search}%`);
     }
 
-    query += ' ORDER BY item_name';
+    // If includePending is true, calculate pending quantities from orders
+    if (includePending === 'true') {
+      query = `
+        SELECT 
+          si.*,
+          COALESCE(SUM(CASE WHEN o.status = 'pending' THEN oi.quantity ELSE 0 END), 0) as pending_quantity
+        FROM stockItems si
+        LEFT JOIN orderItems oi ON LOWER(oi.item_name) = LOWER(si.item_name)
+        LEFT JOIN orders o ON oi.order_id = o.order_id AND o.status = 'pending'
+        WHERE COALESCE(si.is_deleted, 0) = 0
+        ${includeZero === 'true' ? '' : 'AND si.quantity > 0'}
+        ${search ? 'AND si.item_name LIKE ?' : ''}
+        GROUP BY si.item_id
+      `;
+      if (search) {
+        params.push(`%${search}%`);
+      }
+    }
+
+    query += ' ORDER BY si.item_name';
     
     // Add limit for performance (prevents loading thousands of items)
     if (limit && parseInt(limit) > 0) {
@@ -35,7 +84,9 @@ router.get('/', async (req, res) => {
 // GET single stock item
 router.get('/:id', async (req, res) => {
   try {
-    const stockItem = await getRow('SELECT * FROM stockItems WHERE item_id = ?', [req.params.id]);
+    await ensureStockItemsSchema();
+    
+    const stockItem = await getRow('SELECT * FROM stockItems WHERE item_id = ? AND COALESCE(is_deleted, 0) = 0', [req.params.id]);
     
     if (!stockItem) {
       return res.status(404).json({ error: 'Stock item not found' });
@@ -51,6 +102,8 @@ router.get('/:id', async (req, res) => {
 // POST create new stock item (from catalog or new)
 router.post('/', async (req, res) => {
   try {
+    await ensureStockItemsSchema();
+    
     const { item_name, quantity, unit, notes, catalog_id } = req.body;
     
     if (!item_name) {
@@ -89,6 +142,8 @@ router.post('/', async (req, res) => {
 // PUT update stock item
 router.put('/:id', async (req, res) => {
   try {
+    await ensureStockItemsSchema();
+    
     const { item_name, quantity, unit, notes, is_dynamic } = req.body;
     
     if (!item_name) {
@@ -138,19 +193,41 @@ router.put('/:id/quantity', async (req, res) => {
   }
 });
 
-// DELETE stock item
+// DELETE stock item (soft delete - preserves voucher history and audit logs)
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await runQuery('DELETE FROM stockItems WHERE item_id = ?', [req.params.id]);
+    await ensureStockItemsSchema();
+    
+    // Check if item exists and is not already deleted
+    const item = await getRow('SELECT * FROM stockItems WHERE item_id = ? AND COALESCE(is_deleted, 0) = 0', [req.params.id]);
+    
+    if (!item) {
+      return res.status(404).json({ error: 'Stock item not found or already deleted' });
+    }
+
+    // Use soft delete: mark item as deleted instead of actually deleting it
+    // This preserves voucher history and audit logs
+
+    // Mark item as deleted (soft delete)
+    const result = await runQuery(
+      'UPDATE stockItems SET is_deleted = 1, quantity = 0 WHERE item_id = ?',
+      [req.params.id]
+    );
     
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Stock item not found' });
     }
     
-    res.json({ message: 'Stock item deleted successfully' });
+    res.json({ 
+      message: 'Stock item deleted successfully (preserving voucher history and audit logs)',
+      deletedItem: item.item_name
+    });
   } catch (error) {
     console.error('Error deleting stock item:', error);
-    res.status(500).json({ error: 'Failed to delete stock item' });
+    res.status(500).json({ 
+      error: 'Failed to delete stock item',
+      details: error.message 
+    });
   }
 });
 

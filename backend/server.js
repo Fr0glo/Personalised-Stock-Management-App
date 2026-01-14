@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -14,6 +15,7 @@ import exitVoucherRoutes from './routes/exitVouchers.js';
 import entryVoucherDetailsRoutes from './routes/entryVoucherDetails.js';
 import exitVoucherDetailsRoutes from './routes/exitVoucherDetails.js';
 import auditLogRoutes from './routes/auditLogs.js';
+import orderRoutes from './routes/orders.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,10 +23,21 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Essential middleware only
-app.use(cors());  // Allow frontend to connect
-app.use(express.json());  // Parse JSON requests
-app.use(express.urlencoded({ extended: true }));  // Parse form data
+// Rate limiting helps prevent server overload from too many requests
+// Each IP address can make up to 200 requests every 15 minutes
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // Maximum requests per IP in the time window
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Set up middleware for all requests
+app.use('/api/', limiter); // Apply rate limiting to API routes
+app.use(cors()); // Allow frontend to connect to the API
+app.use(express.json()); // Parse incoming JSON data
+app.use(express.urlencoded({ extended: true })); // Parse form data
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -37,6 +50,7 @@ app.use('/api/exit-vouchers', exitVoucherRoutes);
 app.use('/api/entry-vouchers/details', entryVoucherDetailsRoutes);
 app.use('/api/exit-vouchers/details', exitVoucherDetailsRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -59,7 +73,7 @@ app.use('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 API: http://localhost:${PORT}/api`);
-  console.log(`🔍 Health: http://localhost:${PORT}/api/health`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`API endpoint: http://localhost:${PORT}/api`);
+  console.log(`Health check: http://localhost:${PORT}/api/health`);
 });

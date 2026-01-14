@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Minus, Package, User, Calendar, Save, ArrowLeft, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
 
 const BonSortie = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isFromSecurity = location.pathname.includes('/security/');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
@@ -12,12 +17,13 @@ const BonSortie = () => {
     voucherNumber: '',
     handledBy: '',
     takenBy: '',
-    place: '',
     notes: ''
   });
 
   const [adminUsers, setAdminUsers] = useState([]);
   const [workers, setWorkers] = useState([]);
+  const [pendingOrders, setPendingOrders] = useState([]);
+  const [showOrdersSection, setShowOrdersSection] = useState(false);
 
   // Fetch users and workers on component mount
   useEffect(() => {
@@ -44,13 +50,37 @@ const BonSortie = () => {
     fetchUsersAndWorkers();
   }, []);
 
+  // Fetch pending orders if coming from Security page
+  useEffect(() => {
+    if (isFromSecurity) {
+      const fetchPendingOrders = async () => {
+        try {
+          const response = await fetch('http://localhost:5000/api/orders?status=pending');
+          if (response.ok) {
+            const orders = await response.json();
+            // Filter to only show pending orders
+            const pendingOnly = orders.filter(order => order.status === 'pending');
+            setPendingOrders(pendingOnly);
+            // Auto-expand orders section if there are pending orders
+            if (pendingOnly.length > 0) {
+              setShowOrdersSection(true);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching pending orders:', error);
+        }
+      };
+      fetchPendingOrders();
+    }
+  }, [isFromSecurity]);
+
   // Auto-fill "Géré par" with logged-in user
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       const loggedInUser = JSON.parse(userStr);
-      // Only auto-fill if user is not security role (security users shouldn't create vouchers from normal pages)
-      if (loggedInUser && loggedInUser.role !== 'security' && loggedInUser.username) {
+      // Auto-fill for all users including security
+      if (loggedInUser && loggedInUser.username) {
         setVoucherData(prev => ({
           ...prev,
           handledBy: loggedInUser.username
@@ -72,9 +102,9 @@ const BonSortie = () => {
 
     setIsSearching(true);
     try {
-      // Use server-side search with limit for performance
-      const response = await axios.get(`http://localhost:5000/api/stock-items?search=${encodeURIComponent(trimmedTerm)}&limit=50`);
-      setSearchResults(response.data); // Already filtered by API (quantity > 0)
+      // Use server-side search with limit for performance - include items with zero quantity
+      const response = await axios.get(`http://localhost:5000/api/stock-items?search=${encodeURIComponent(trimmedTerm)}&limit=50&includeZero=true`);
+      setSearchResults(response.data); // Shows all stock items including zero quantity
       setShowSearchResults(true);
     } catch (error) {
       console.error('Error searching products:', error);
@@ -194,7 +224,6 @@ const BonSortie = () => {
         date: fullDateTime,
         handled_by: voucherData.handledBy,
         taken_by: voucherData.takenBy,
-        place: voucherData.place || null,
         notes: voucherData.notes
       });
       
@@ -203,14 +232,15 @@ const BonSortie = () => {
         date: fullDateTime,
         handled_by: voucherData.handledBy,
         taken_by: voucherData.takenBy,
-        place: voucherData.place || null,
+        place: null,
         notes: voucherData.notes
       });
 
       console.log('✅ Exit voucher created:', voucherResponse.data);
-      const voucherId = voucherResponse.data.voucher_id;
+      const voucherId = voucherResponse.data.voucher_id || voucherResponse.data.exit_id;
       
       if (!voucherId) {
+        console.error('❌ Voucher response:', voucherResponse.data);
         throw new Error('Voucher ID is missing from response');
       }
       
@@ -256,13 +286,14 @@ const BonSortie = () => {
         voucherNumber: '',
         handledBy: '',
         takenBy: '',
-        place: '',
         notes: ''
       });
       
     } catch (error) {
       console.error('Error creating voucher:', error);
-      alert('Erreur lors de la création du bon de sortie');
+      console.error('Full error response:', error.response?.data);
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Erreur inconnue';
+      alert(`Erreur lors de la création du bon de sortie:\n${errorMessage}`);
     }
   };
 
@@ -272,7 +303,7 @@ const BonSortie = () => {
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button 
-            onClick={() => window.history.back()}
+            onClick={() => isFromSecurity ? navigate('/security') : window.history.back()}
             className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-slate-600" />
@@ -286,6 +317,150 @@ const BonSortie = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Search and Add Items */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Pending Orders Section (only shown when coming from Security page) */}
+            {isFromSecurity && pendingOrders.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                    <Package className="w-5 h-5" />
+                    Articles à Retirer (Commandes en Attente)
+                  </h2>
+                  <button
+                    onClick={() => setShowOrdersSection(!showOrdersSection)}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    {showOrdersSection ? 'Masquer' : 'Afficher'}
+                  </button>
+                </div>
+
+                {showOrdersSection && (
+                  <div className="space-y-4">
+                    {pendingOrders.map((order) => (
+                      <div key={order.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h3 className="font-semibold text-slate-800">Commande #{order.id}</h3>
+                            <p className="text-sm text-slate-600">
+                              Par: {order.created_by} • {new Date(order.date).toLocaleDateString('fr-FR')}
+                            </p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              // Add all items from this order to selected items
+                              for (const orderItem of order.items) {
+                                try {
+                                  // Fetch stock item by name
+                                  const searchResponse = await axios.get(
+                                    `http://localhost:5000/api/stock-items?search=${encodeURIComponent(orderItem.name)}&limit=10&includeZero=true`
+                                  );
+                                  const foundItems = searchResponse.data;
+                                  const matchingItem = foundItems.find(si => 
+                                    si.item_name.toLowerCase() === orderItem.name.toLowerCase()
+                                  );
+                                  
+                                  if (matchingItem && matchingItem.quantity > 0) {
+                                    const existingItem = selectedItems.find(item => item.item_id === matchingItem.item_id);
+                                    if (existingItem) {
+                                      // Update quantity
+                                      setSelectedItems(prev => prev.map(item =>
+                                        item.item_id === matchingItem.item_id
+                                          ? { ...item, quantity: Math.min(item.quantity + orderItem.quantity, matchingItem.quantity) }
+                                          : item
+                                      ));
+                                    } else {
+                                      // Add new item
+                                      setSelectedItems(prev => [...prev, {
+                                        item_id: matchingItem.item_id,
+                                        item_name: matchingItem.item_name,
+                                        quantity: Math.min(orderItem.quantity, matchingItem.quantity),
+                                        unit: orderItem.unit || matchingItem.unit || 'pcs',
+                                        notes: '',
+                                        current_stock: matchingItem.quantity,
+                                        max_quantity: matchingItem.quantity
+                                      }]);
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error(`Error fetching item ${orderItem.name}:`, error);
+                                }
+                              }
+                            }}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            Ajouter Tous
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {order.items.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-2 bg-white rounded border border-slate-200">
+                              <div className="flex-1">
+                                <span className="font-medium text-slate-800">{item.name}</span>
+                                {item.place && (
+                                  <div className="text-xs text-slate-500 mt-1">📍 {item.place}</div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm text-slate-600">
+                                  {item.quantity} {item.unit}
+                                </span>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      // Search for the item in stock
+                                      const searchResponse = await axios.get(
+                                        `http://localhost:5000/api/stock-items?search=${encodeURIComponent(item.name)}&limit=10&includeZero=true`
+                                      );
+                                      const foundItems = searchResponse.data;
+                                      const matchingItem = foundItems.find(si => 
+                                        si.item_name.toLowerCase() === item.name.toLowerCase()
+                                      );
+                                      
+                                      if (matchingItem && matchingItem.quantity > 0) {
+                                        const existingItem = selectedItems.find(sel => sel.item_id === matchingItem.item_id);
+                                        if (existingItem) {
+                                          // Update quantity
+                                          setSelectedItems(prev => prev.map(sel =>
+                                            sel.item_id === matchingItem.item_id
+                                              ? { ...sel, quantity: Math.min(sel.quantity + item.quantity, matchingItem.quantity) }
+                                              : sel
+                                          ));
+                                        } else {
+                                          // Add new item
+                                          setSelectedItems(prev => [...prev, {
+                                            item_id: matchingItem.item_id,
+                                            item_name: matchingItem.item_name,
+                                            quantity: Math.min(item.quantity, matchingItem.quantity),
+                                            unit: item.unit || matchingItem.unit || 'pcs',
+                                            notes: '',
+                                            current_stock: matchingItem.quantity,
+                                            max_quantity: matchingItem.quantity
+                                          }]);
+                                        }
+                                      } else if (matchingItem && matchingItem.quantity === 0) {
+                                        alert(`Article "${item.name}" n'a pas de stock disponible`);
+                                      } else {
+                                        alert(`Article "${item.name}" non trouvé dans le stock`);
+                                      }
+                                    } catch (error) {
+                                      console.error('Error adding item:', error);
+                                      alert(`Erreur lors de l'ajout de "${item.name}"`);
+                                    }
+                                  }}
+                                  className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                                >
+                                  Ajouter
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Search Section */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <h2 className="text-xl font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -436,20 +611,6 @@ const BonSortie = () => {
               </h2>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Lieu / Place
-                  </label>
-                  <input
-                    type="text"
-                    value={voucherData.place}
-                    onChange={(e) => setVoucherData(prev => ({ ...prev, place: e.target.value }))}
-                    placeholder="Ex: A-13, B-19, etc."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Aide le personnel de sécurité à localiser les articles</p>
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Géré par <span className="text-red-500">*</span>

@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Minus, Package, User, Calendar, Save, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
 
 const BonEntree = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isFromSecurity = location.pathname.includes('/security/');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
@@ -49,8 +54,8 @@ const BonEntree = () => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       const loggedInUser = JSON.parse(userStr);
-      // Only auto-fill if user is not security role (security users shouldn't create vouchers from normal pages)
-      if (loggedInUser && loggedInUser.role !== 'security' && loggedInUser.username) {
+      // Auto-fill for all users including security
+      if (loggedInUser && loggedInUser.username) {
         setVoucherData(prev => ({
           ...prev,
           handledBy: loggedInUser.username
@@ -106,6 +111,7 @@ const BonEntree = () => {
         quantity: 1,
         unit: product.default_unit || 'pcs',
         notes: product.notes || '',
+        place: '', // Individual place for this item
         current_stock: 0 // Will be updated when added to stock
       };
       setSelectedItems(prev => [...prev, newItem]);
@@ -136,6 +142,15 @@ const BonEntree = () => {
     ));
   };
 
+  // Update item place/emplacement
+  const updatePlace = (catalogId, newPlace) => {
+    setSelectedItems(prev => prev.map(item => 
+      item.catalog_id === catalogId 
+        ? { ...item, place: newPlace }
+        : item
+    ));
+  };
+
   // Remove item from selected items
   const removeItem = (catalogId) => {
     setSelectedItems(prev => prev.filter(item => item.catalog_id !== catalogId));
@@ -151,6 +166,7 @@ const BonEntree = () => {
       quantity: 1,
       unit: 'pcs',
       notes: '',
+      place: '', // Individual place for this item
       current_stock: 0,
       isNew: true
     };
@@ -212,9 +228,10 @@ const BonEntree = () => {
 
       // Add each item to the voucher and stock
       for (const item of selectedItems) {
-        console.log('🔍 Processing item:', item);
+        console.log('Processing item:', item);
         
         // Add item to stock (this will create new stock item or update existing)
+        // Note: place will be set when adding to voucher details
         const stockResponse = await axios.post('http://localhost:5000/api/stock-items', {
           item_name: item.item_name,
           quantity: item.quantity,
@@ -223,19 +240,25 @@ const BonEntree = () => {
         });
 
         const stockItem = stockResponse.data;
-        console.log('🔍 Stock item created/updated:', stockItem);
-        console.log('🔍 Stock item ID:', stockItem.item_id);
+        console.log('Stock item created/updated:', stockItem);
+        console.log('Stock item ID:', stockItem.item_id);
 
-        // Add to voucher details
+        // Add to voucher details with individual place if more than 2 items
+        // If there are more than 2 items, use individual place; otherwise use voucher place
+        const itemPlace = selectedItems.length > 2 && item.place 
+          ? item.place 
+          : (voucherData.place || null);
+        
         const detailData = {
           voucher_id: voucherId,
           item_id: stockItem.item_id,
-          quantity: item.quantity
+          quantity: item.quantity,
+          place: itemPlace
         };
-        console.log('🔍 Sending to voucher details:', detailData);
+        console.log('Sending to voucher details:', detailData);
         
         await axios.post('http://localhost:5000/api/entry-vouchers/details', detailData);
-        console.log('✅ Item added to voucher details successfully');
+        console.log('Item added to voucher details successfully');
       }
 
       alert('Bon d\'entrée créé avec succès!');
@@ -262,7 +285,7 @@ const BonEntree = () => {
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button 
-            onClick={() => window.history.back()}
+            onClick={() => isFromSecurity ? navigate('/security') : window.history.back()}
             className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-slate-600" />
@@ -370,7 +393,7 @@ const BonEntree = () => {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {/* Quantity */}
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -431,6 +454,20 @@ const BonEntree = () => {
                             {item.current_stock} {item.unit}
                           </div>
                         </div>
+
+                        {/* Emplacement */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Emplacement
+                          </label>
+                          <input
+                            type="text"
+                            value={item.place || ''}
+                            onChange={(e) => updatePlace(item.catalog_id, e.target.value)}
+                            placeholder="Ex: A-13, B-19"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -448,18 +485,6 @@ const BonEntree = () => {
               </h2>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Lieu / Place
-                  </label>
-                  <input
-                    type="text"
-                    value={voucherData.place}
-                    onChange={(e) => setVoucherData(prev => ({ ...prev, place: e.target.value }))}
-                    placeholder="Ex: A-13, B-19, etc."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                  />
-                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">

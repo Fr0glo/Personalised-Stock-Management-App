@@ -81,16 +81,41 @@ router.put('/:id', async (req, res) => {
 // DELETE worker
 router.delete('/:id', async (req, res) => {
   try {
+    // Check if worker exists
+    const worker = await getRow('SELECT * FROM workers WHERE worker_id = ?', [req.params.id]);
+    
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    // Delete related records first (to avoid foreign key constraint issues)
+    // Delete from entryDetails
+    await runQuery('DELETE FROM entryDetails WHERE worker_id = ?', [req.params.id]);
+    
+    // Delete from exitDetails
+    await runQuery('DELETE FROM exitDetails WHERE worker_id = ?', [req.params.id]);
+    
+    // Update vouchers to remove taken_by reference (set to NULL)
+    await runQuery('UPDATE entryVouchers SET taken_by = NULL WHERE taken_by = ?', [req.params.id]);
+    await runQuery('UPDATE exitVouchers SET taken_by = NULL WHERE taken_by = ?', [req.params.id]);
+    
+    // Now delete the worker
     const result = await runQuery('DELETE FROM workers WHERE worker_id = ?', [req.params.id]);
     
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Worker not found' });
     }
     
-    res.json({ message: 'Worker deleted successfully' });
+    res.json({ 
+      message: 'Worker deleted successfully',
+      deletedWorker: `${worker.F_Name} ${worker.Surname}`
+    });
   } catch (error) {
     console.error('Error deleting worker:', error);
-    res.status(500).json({ error: 'Failed to delete worker' });
+    res.status(500).json({ 
+      error: 'Failed to delete worker',
+      details: error.message 
+    });
   }
 });
 

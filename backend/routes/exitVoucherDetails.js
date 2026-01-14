@@ -34,17 +34,7 @@ router.post('/', async (req, res) => {
   try {
     const { voucher_id, item_id, quantity } = req.body;
 
-    console.log('🔍 Received data:', { voucher_id, item_id, quantity });
-    console.log('🔍 Data types:', {
-      voucher_id_type: typeof voucher_id,
-      item_id_type: typeof item_id,
-      quantity_type: typeof quantity
-    });
-    console.log('🔍 Data values:', {
-      voucher_id_value: voucher_id,
-      item_id_value: item_id,
-      quantity_value: quantity
-    });
+    console.log('Received data for exit voucher detail:', { voucher_id, item_id, quantity });
 
     if (!voucher_id || !item_id || quantity === undefined || quantity <= 0) {
       return res.status(400).json({ 
@@ -71,31 +61,34 @@ router.post('/', async (req, res) => {
     // Get voucher to map responsible users
     const voucher = await getRow('SELECT handled_by, taken_by FROM exitVouchers WHERE exit_id = ?', [voucher_id]);
 
-    // Insert into exitDetails
+    // Add this item to the exit voucher details
+    // Note: exitDetails table uses exit_id, which is the same as voucher_id
     const result = await runQuery(
       'INSERT INTO exitDetails (exit_id, item_id, worker_id, quantity) VALUES (?, ?, ?, ?)',
       [voucher_id, item_id, voucher?.taken_by || 1, quantity]
     );
+    
+    console.log('Exit detail inserted with ID:', result.id);
 
-    // Get current stock quantity before reducing
+    // Calculate stock quantities before and after the reduction
     const quantityBefore = currentStock.quantity;
     const quantityAfter = quantityBefore - Number(quantity);
 
-    // Reduce stock quantity
-    console.log(`🔍 Reducing stock: item_id=${item_id}, quantity=${quantity}`);
+    // Reduce the stock quantity for this item
+    console.log(`Reducing stock: item_id=${item_id}, quantity=${quantity}`);
     const stockResult = await runQuery(
       'UPDATE stockItems SET quantity = quantity - ? WHERE item_id = ?',
       [quantity, item_id]
     );
-    console.log(`📊 Stock update result:`, stockResult);
+    console.log('Stock update completed:', stockResult);
     
-    // Log audit trail
+    // Record this change in the audit log for tracking
     await runQuery(
       'INSERT INTO auditLogs (action, item_id, user_id, quantity_before, quantity_after) VALUES (?, ?, ?, ?, ?)',
       ['exit', item_id, voucher ? voucher.handled_by : 1, quantityBefore, quantityAfter]
     );
 
-    console.log('📊 Stock reduced:', {
+    console.log('Stock reduced successfully:', {
       item_id,
       quantity_before: quantityBefore,
       quantity_removed: quantity,
@@ -109,13 +102,67 @@ router.post('/', async (req, res) => {
       await runQuery('UPDATE stockItems SET quantity = 0 WHERE item_id = ?', [item_id]);
     }
 
+    // Check if this item matches any pending order and mark order as completed
+    try {
+      const stockItem = await getRow('SELECT item_name FROM stockItems WHERE item_id = ?', [item_id]);
+      if (stockItem) {
+        // Find pending orders that contain this item
+        const matchingOrders = await getAll(`
+          SELECT DISTINCT o.order_id
+          FROM orders o
+          JOIN orderItems oi ON o.order_id = oi.order_id
+          WHERE o.status = 'pending' 
+            AND LOWER(oi.item_name) = LOWER(?)
+        `, [stockItem.item_name]);
+
+        // For each matching order, check if all items have been delivered
+        for (const order of matchingOrders) {
+          const orderItems = await getAll(
+            'SELECT item_name, quantity FROM orderItems WHERE order_id = ?',
+            [order.order_id]
+          );
+          
+          // Check if we can find exit vouchers that cover all items in this order
+          let allItemsDelivered = true;
+          for (const orderItem of orderItems) {
+            // Check if there are exit vouchers with enough quantity for this item
+            const deliveredQuantity = await getRow(`
+              SELECT COALESCE(SUM(ed.quantity), 0) as total_delivered
+              FROM exitDetails ed
+              JOIN stockItems si ON ed.item_id = si.item_id
+              JOIN exitVouchers ev ON ed.exit_id = ev.exit_id
+              WHERE LOWER(si.item_name) = LOWER(?)
+                AND ev.date >= (SELECT date FROM orders WHERE order_id = ?)
+            `, [orderItem.item_name, order.order_id]);
+            
+            if (!deliveredQuantity || deliveredQuantity.total_delivered < orderItem.quantity) {
+              allItemsDelivered = false;
+              break;
+            }
+          }
+          
+          // If all items are delivered, mark order as completed
+          if (allItemsDelivered) {
+            await runQuery(
+              'UPDATE orders SET status = ? WHERE order_id = ?',
+              ['completed', order.order_id]
+            );
+            console.log(`Order ${order.order_id} marked as completed`);
+          }
+        }
+      }
+    } catch (orderError) {
+      console.error('Error checking orders:', orderError);
+      // Don't fail the voucher creation if order checking fails
+    }
+
     res.status(201).json({
       detail_id: result.lastID,
       message: 'Item added to exit voucher successfully'
     });
   } catch (error) {
-    console.error('❌ Error adding item to exit voucher:', error);
-    console.error('❌ Error details:', {
+    console.error('Error adding item to exit voucher:', error);
+    console.error('Error details:', {
       message: error.message,
       code: error.code,
       stack: error.stack
