@@ -18,7 +18,7 @@ const Orders = () => {
         setError(null);
         
         // Limit to 500 items for performance, include pending quantities
-        const response = await fetch('http://localhost:5000/api/stock-items?limit=500&includePending=true');
+        const response = await fetch('/api/stock-items?limit=500&includePending=true');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -161,7 +161,7 @@ const Orders = () => {
       }));
 
       // Send order to backend
-      const response = await fetch('http://localhost:5000/api/orders', {
+      const response = await fetch('/api/orders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

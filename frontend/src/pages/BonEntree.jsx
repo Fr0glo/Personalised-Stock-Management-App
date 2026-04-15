@@ -29,14 +29,14 @@ const BonEntree = () => {
     const fetchUsersAndWorkers = async () => {
       try {
         // Fetch admin users
-        const usersResponse = await fetch('http://localhost:5000/api/users');
+        const usersResponse = await fetch('/api/users');
         if (usersResponse.ok) {
           const users = await usersResponse.json();
           setAdminUsers(users.filter(user => user.role === 'admin'));
         }
 
         // Fetch workers
-        const workersResponse = await fetch('http://localhost:5000/api/workers');
+        const workersResponse = await fetch('/api/workers');
         if (workersResponse.ok) {
           const workersData = await workersResponse.json();
           setWorkers(workersData);
@@ -74,7 +74,7 @@ const BonEntree = () => {
 
     setIsSearching(true);
     try {
-      const response = await axios.get(`http://localhost:5000/api/product-catalog?search=${encodeURIComponent(term)}&limit=20`);
+      const response = await axios.get(`/api/product-catalog?search=${encodeURIComponent(term)}&limit=20`);
       setSearchResults(response.data);
       setShowSearchResults(true);
     } catch (error) {
@@ -179,7 +179,7 @@ const BonEntree = () => {
   // Get next voucher number
   const getNextVoucherNumber = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/entry-vouchers');
+      const response = await axios.get('/api/entry-vouchers');
       const vouchers = response.data;
       const nextNumber = vouchers.length + 1;
       return nextNumber.toString();
@@ -215,7 +215,7 @@ const BonEntree = () => {
       const fullDateTime = new Date().toISOString();
 
       // Create entry voucher
-      const voucherResponse = await axios.post('http://localhost:5000/api/entry-vouchers', {
+      const voucherResponse = await axios.post('/api/entry-vouchers', {
         voucher_number: voucherNumber,
         date: fullDateTime,
         handled_by: voucherData.handledBy,
@@ -232,7 +232,7 @@ const BonEntree = () => {
         
         // Add item to stock (this will create new stock item or update existing)
         // Note: place will be set when adding to voucher details
-        const stockResponse = await axios.post('http://localhost:5000/api/stock-items', {
+        const stockResponse = await axios.post('/api/stock-items', {
           item_name: item.item_name,
           quantity: item.quantity,
           unit: item.unit,
@@ -243,11 +243,12 @@ const BonEntree = () => {
         console.log('Stock item created/updated:', stockItem);
         console.log('Stock item ID:', stockItem.item_id);
 
-        // Add to voucher details with individual place if more than 2 items
-        // If there are more than 2 items, use individual place; otherwise use voucher place
-        const itemPlace = selectedItems.length > 2 && item.place 
-          ? item.place 
-          : (voucherData.place || null);
+        // Add to voucher details with priority:
+        // 1) item's own emplacement if provided
+        // 2) otherwise, voucher-level emplacement
+        const trimmedItemPlace = (item.place || '').trim();
+        const trimmedVoucherPlace = (voucherData.place || '').trim();
+        const itemPlace = trimmedItemPlace || trimmedVoucherPlace || null;
         
         const detailData = {
           voucher_id: voucherId,
@@ -257,7 +258,7 @@ const BonEntree = () => {
         };
         console.log('Sending to voucher details:', detailData);
         
-        await axios.post('http://localhost:5000/api/entry-vouchers/details', detailData);
+        await axios.post('/api/entry-vouchers/details', detailData);
         console.log('Item added to voucher details successfully');
       }
 
@@ -275,7 +276,8 @@ const BonEntree = () => {
       
     } catch (error) {
       console.error('Error creating voucher:', error);
-      alert('Erreur lors de la création du bon d\'entrée');
+      const msg = error.response?.data?.details || error.response?.data?.error || error.message;
+      alert(msg || 'Erreur lors de la création du bon d\'entrée');
     }
   };
 

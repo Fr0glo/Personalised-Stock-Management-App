@@ -16,7 +16,7 @@ const Security = () => {
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch('http://localhost:5000/api/orders?status=pending');
+        const response = await fetch('/api/orders?status=pending');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);

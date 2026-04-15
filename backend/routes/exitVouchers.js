@@ -177,21 +177,40 @@ router.post('/', async (req, res) => {
       handledByUserId = handledByUser.user_id;
     }
 
-    // Find the worker ID for the person who took the items
-    // Split the name into first and last name to search the workers table
+    // Find the worker ID for the person who took the items (case-insensitive, trim spaces)
     let takenByWorkerId = null;
-    if (taken_by) {
-      const nameParts = taken_by.trim().split(' ');
-      const firstName = nameParts.shift();
-      const lastName = nameParts.join(' ') || null;
-      const worker = await getRow(
-        lastName
-          ? 'SELECT worker_id FROM workers WHERE F_Name = ? AND Surname = ?'
-          : 'SELECT worker_id FROM workers WHERE F_Name = ?',
-        lastName ? [firstName, lastName] : [firstName]
-      );
+    if (taken_by && typeof taken_by === 'string' && taken_by.trim()) {
+      const nameParts = taken_by.trim().split(/\s+/).filter(Boolean);
+      const firstName = nameParts.shift()?.trim() || '';
+      const lastName = nameParts.join(' ').trim() || null;
+      let worker = null;
+      if (lastName) {
+        worker = await getRow(
+          `SELECT worker_id FROM workers 
+           WHERE LOWER(TRIM(F_Name)) = LOWER(?) AND LOWER(TRIM(Surname)) = LOWER(?)`,
+          [firstName, lastName]
+        );
+        if (!worker) {
+          worker = await getRow(
+            `SELECT worker_id FROM workers 
+             WHERE LOWER(TRIM(F_Name)) = LOWER(?) AND LOWER(TRIM(Surname)) = LOWER(?)`,
+            [lastName, firstName]
+          );
+        }
+      }
+      if (!worker && firstName) {
+        worker = await getRow(
+          `SELECT worker_id FROM workers WHERE LOWER(TRIM(F_Name)) = LOWER(?) LIMIT 1`,
+          [firstName]
+        );
+      }
       if (worker) {
         takenByWorkerId = worker.worker_id;
+      } else {
+        return res.status(400).json({
+          error: 'Worker not found',
+          details: `No personnel found for "${taken_by.trim()}". Check spelling or add them in Personnel.`
+        });
       }
     }
 

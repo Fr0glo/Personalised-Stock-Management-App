@@ -22,8 +22,8 @@ const Stock = () => {
         
         // In edit mode, include items with zero quantity
         const url = isEditMode 
-          ? 'http://localhost:5000/api/stock-items?limit=500&includeZero=true'
-          : 'http://localhost:5000/api/stock-items?limit=500';
+          ? '/api/stock-items?limit=500&includeZero=true'
+          : '/api/stock-items?limit=500';
         
         const response = await fetch(url);
         
@@ -125,7 +125,7 @@ const Stock = () => {
         is_dynamic: item.is_dynamic !== undefined ? item.is_dynamic : 1
       };
 
-      const response = await fetch(`http://localhost:5000/api/stock-items/${itemId}`, {
+      const response = await fetch(`/api/stock-items/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData)
@@ -142,12 +142,12 @@ const Stock = () => {
       if (updates.unit !== undefined && updates.unit !== item.unit) {
         try {
           // Find catalog entry by item name
-          const catalogResponse = await fetch(`http://localhost:5000/api/product-catalog?search=${encodeURIComponent(item.item_name)}&limit=1`);
+          const catalogResponse = await fetch(`/api/product-catalog?search=${encodeURIComponent(item.item_name)}&limit=1`);
           if (catalogResponse.ok) {
             const catalogItems = await catalogResponse.json();
             const catalogItem = catalogItems.find(c => c.item_name.toLowerCase() === item.item_name.toLowerCase());
             if (catalogItem) {
-              await fetch(`http://localhost:5000/api/product-catalog/${catalogItem.catalog_id}`, {
+              await fetch(`/api/product-catalog/${catalogItem.catalog_id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -189,7 +189,7 @@ const Stock = () => {
 
       console.log('Attempting to delete item:', itemId, item.item_name);
       
-      const response = await fetch(`http://localhost:5000/api/stock-items/${itemId}`, {
+      const response = await fetch(`/api/stock-items/${itemId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
@@ -215,12 +215,12 @@ const Stock = () => {
       // Also try to delete from catalog if it exists (non-blocking)
       if (item && item.item_name) {
         try {
-          const catalogResponse = await fetch(`http://localhost:5000/api/product-catalog?search=${encodeURIComponent(item.item_name)}&limit=10`);
+          const catalogResponse = await fetch(`/api/product-catalog?search=${encodeURIComponent(item.item_name)}&limit=10`);
           if (catalogResponse.ok) {
             const catalogItems = await catalogResponse.json();
             const catalogItem = catalogItems.find(c => c.item_name.toLowerCase() === item.item_name.toLowerCase());
             if (catalogItem) {
-              const catalogDeleteResponse = await fetch(`http://localhost:5000/api/product-catalog/${catalogItem.catalog_id}`, {
+              const catalogDeleteResponse = await fetch(`/api/product-catalog/${catalogItem.catalog_id}`, {
                 method: 'DELETE'
               });
               if (catalogDeleteResponse.ok) {
@@ -237,7 +237,7 @@ const Stock = () => {
       // Refresh the list to ensure consistency
       setTimeout(async () => {
         try {
-          const refreshResponse = await fetch(`http://localhost:5000/api/stock-items?limit=500&includeZero=${isEditMode ? 'true' : 'false'}`);
+          const refreshResponse = await fetch(`/api/stock-items?limit=500&includeZero=${isEditMode ? 'true' : 'false'}`);
           if (refreshResponse.ok) {
             const items = await refreshResponse.json();
             setStockItems(items);
@@ -264,7 +264,7 @@ const Stock = () => {
       const itemName = newItem.item_name.trim();
       
       // First, check if item exists in catalog
-      const catalogSearchResponse = await fetch(`http://localhost:5000/api/product-catalog?search=${encodeURIComponent(itemName)}&limit=10`);
+      const catalogSearchResponse = await fetch(`/api/product-catalog?search=${encodeURIComponent(itemName)}&limit=10`);
       let catalogItem = null;
       
       if (catalogSearchResponse.ok) {
@@ -275,7 +275,7 @@ const Stock = () => {
       // Add or update in product catalog
       if (catalogItem) {
         // Update existing catalog item with new unit if different
-        await fetch(`http://localhost:5000/api/product-catalog/${catalogItem.catalog_id}`, {
+        await fetch(`/api/product-catalog/${catalogItem.catalog_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -287,7 +287,7 @@ const Stock = () => {
         });
       } else {
         // Add new item to catalog
-        await fetch('http://localhost:5000/api/product-catalog', {
+        await fetch('/api/product-catalog', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -300,7 +300,7 @@ const Stock = () => {
       }
 
       // Then add to stock items
-      const response = await fetch('http://localhost:5000/api/stock-items', {
+      const response = await fetch('/api/stock-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -319,7 +319,7 @@ const Stock = () => {
       const addedItem = await response.json();
       
       // Refresh the list to get all items including zero quantity
-      const refreshResponse = await fetch('http://localhost:5000/api/stock-items?limit=500&includeZero=true');
+      const refreshResponse = await fetch('/api/stock-items?limit=500&includeZero=true');
       if (refreshResponse.ok) {
         const items = await refreshResponse.json();
         setStockItems(items);

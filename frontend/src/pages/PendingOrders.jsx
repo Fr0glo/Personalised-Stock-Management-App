@@ -15,8 +15,8 @@ const PendingOrders = () => {
         
         // Fetch all orders (or filtered by status)
         const url = filterStatus === 'all' 
-          ? 'http://localhost:5000/api/orders'
-          : `http://localhost:5000/api/orders?status=${filterStatus}`;
+          ? '/api/orders'
+          : `/api/orders?status=${filterStatus}`;
         
         const response = await fetch(url);
         
@@ -82,7 +82,7 @@ const PendingOrders = () => {
     // Fetch all orders once to get accurate counts
     const fetchAllOrders = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/orders');
+        const response = await fetch('/api/orders');
         if (response.ok) {
           const data = await response.json();
           setAllOrders(data);

@@ -30,14 +30,14 @@ const BonSortie = () => {
     const fetchUsersAndWorkers = async () => {
       try {
         // Fetch admin users
-        const usersResponse = await fetch('http://localhost:5000/api/users');
+        const usersResponse = await fetch('/api/users');
         if (usersResponse.ok) {
           const users = await usersResponse.json();
           setAdminUsers(users.filter(user => user.role === 'admin'));
         }
 
         // Fetch workers
-        const workersResponse = await fetch('http://localhost:5000/api/workers');
+        const workersResponse = await fetch('/api/workers');
         if (workersResponse.ok) {
           const workersData = await workersResponse.json();
           setWorkers(workersData);
@@ -55,7 +55,7 @@ const BonSortie = () => {
     if (isFromSecurity) {
       const fetchPendingOrders = async () => {
         try {
-          const response = await fetch('http://localhost:5000/api/orders?status=pending');
+          const response = await fetch('/api/orders?status=pending');
           if (response.ok) {
             const orders = await response.json();
             // Filter to only show pending orders
@@ -89,6 +89,22 @@ const BonSortie = () => {
     }
   }, [adminUsers]); // Run after adminUsers are loaded
 
+  // Fetch a default list of available stock items when focusing the search field
+  const fetchAllStockItems = async () => {
+    setIsSearching(true);
+    try {
+      const response = await axios.get('/api/stock-items?limit=50&includeZero=true');
+      setSearchResults(response.data);
+      setShowSearchResults(true);
+    } catch (error) {
+      console.error('Error fetching stock items:', error);
+      setSearchResults([]);
+      setShowSearchResults(false);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   // Search for available stock items (quantity > 0) - server-side search only
   const searchProducts = async (term) => {
     const trimmedTerm = term.trim();
@@ -103,12 +119,13 @@ const BonSortie = () => {
     setIsSearching(true);
     try {
       // Use server-side search with limit for performance - include items with zero quantity
-      const response = await axios.get(`http://localhost:5000/api/stock-items?search=${encodeURIComponent(trimmedTerm)}&limit=50&includeZero=true`);
+      const response = await axios.get(`/api/stock-items?search=${encodeURIComponent(trimmedTerm)}&limit=50&includeZero=true`);
       setSearchResults(response.data); // Shows all stock items including zero quantity
       setShowSearchResults(true);
     } catch (error) {
       console.error('Error searching products:', error);
       setSearchResults([]);
+      setShowSearchResults(false);
     } finally {
       setIsSearching(false);
     }
@@ -122,11 +139,14 @@ const BonSortie = () => {
   };
 
   const handleSearchFocus = () => {
-    // Only show results if user has typed something (server-side search)
-    if (searchTerm.trim().length >= 2) {
-      searchProducts(searchTerm);
+    const trimmed = searchTerm.trim();
+
+    if (trimmed.length >= 2) {
+      // If user already typed enough characters, run a filtered search
+      searchProducts(trimmed);
     } else {
-      setShowSearchResults(false);
+      // Otherwise, show a default list of stock items on focus
+      fetchAllStockItems();
     }
   };
 
@@ -183,7 +203,7 @@ const BonSortie = () => {
   // Get next voucher number
   const getNextVoucherNumber = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/exit-vouchers');
+      const response = await axios.get('/api/exit-vouchers');
       const vouchers = response.data;
       const nextNumber = vouchers.length + 1;
       return nextNumber.toString();
@@ -227,7 +247,7 @@ const BonSortie = () => {
         notes: voucherData.notes
       });
       
-      const voucherResponse = await axios.post('http://localhost:5000/api/exit-vouchers', {
+      const voucherResponse = await axios.post('/api/exit-vouchers', {
         voucher_number: voucherNumber,
         date: fullDateTime,
         handled_by: voucherData.handledBy,
@@ -265,7 +285,7 @@ const BonSortie = () => {
           }
           
           // Add to voucher details (this will also reduce stock in the backend)
-          const detailResponse = await axios.post('http://localhost:5000/api/exit-vouchers/details', {
+          const detailResponse = await axios.post('/api/exit-vouchers/details', {
             voucher_id: voucherId,
             item_id: item.item_id,
             quantity: item.quantity
@@ -291,8 +311,7 @@ const BonSortie = () => {
       
     } catch (error) {
       console.error('Error creating voucher:', error);
-      console.error('Full error response:', error.response?.data);
-      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Erreur inconnue';
+      const errorMessage = error.response?.data?.details || error.response?.data?.error || error.message || 'Erreur inconnue';
       alert(`Erreur lors de la création du bon de sortie:\n${errorMessage}`);
     }
   };
@@ -317,23 +336,32 @@ const BonSortie = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Search and Add Items */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Pending Orders Section (only shown when coming from Security page) */}
-            {isFromSecurity && pendingOrders.length > 0 && (
+            {/* Pending Orders Section (shown when coming from Security page) */}
+            {isFromSecurity && (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
                     <Package className="w-5 h-5" />
                     Articles à Retirer (Commandes en Attente)
                   </h2>
-                  <button
-                    onClick={() => setShowOrdersSection(!showOrdersSection)}
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    {showOrdersSection ? 'Masquer' : 'Afficher'}
-                  </button>
+                  {pendingOrders.length > 0 && (
+                    <button
+                      onClick={() => setShowOrdersSection(!showOrdersSection)}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      {showOrdersSection ? 'Masquer' : 'Afficher'}
+                    </button>
+                  )}
                 </div>
 
-                {showOrdersSection && (
+                {/* Empty state when there are no pending orders */}
+                {pendingOrders.length === 0 && (
+                  <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-sm text-slate-600">
+                    Aucune commande en attente pour le moment. Les commandes sont automatiquement retirées de cette liste une fois entièrement servies.
+                  </div>
+                )}
+
+                {pendingOrders.length > 0 && showOrdersSection && (
                   <div className="space-y-4">
                     {pendingOrders.map((order) => (
                       <div key={order.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
@@ -351,7 +379,7 @@ const BonSortie = () => {
                                 try {
                                   // Fetch stock item by name
                                   const searchResponse = await axios.get(
-                                    `http://localhost:5000/api/stock-items?search=${encodeURIComponent(orderItem.name)}&limit=10&includeZero=true`
+                                    `/api/stock-items?search=${encodeURIComponent(orderItem.name)}&limit=10&includeZero=true`
                                   );
                                   const foundItems = searchResponse.data;
                                   const matchingItem = foundItems.find(si => 
@@ -408,7 +436,7 @@ const BonSortie = () => {
                                     try {
                                       // Search for the item in stock
                                       const searchResponse = await axios.get(
-                                        `http://localhost:5000/api/stock-items?search=${encodeURIComponent(item.name)}&limit=10&includeZero=true`
+                                        `/api/stock-items?search=${encodeURIComponent(item.name)}&limit=10&includeZero=true`
                                       );
                                       const foundItems = searchResponse.data;
                                       const matchingItem = foundItems.find(si => 

@@ -136,10 +136,10 @@ const Personnel = () => {
         setError(null);
 
         const [workersResponse, usersResponse, entryResponse, exitResponse] = await Promise.all([
-          fetch('http://localhost:5000/api/workers'),
-          fetch('http://localhost:5000/api/users'),
-          fetch('http://localhost:5000/api/entry-vouchers'),
-          fetch('http://localhost:5000/api/exit-vouchers')
+          fetch('/api/workers'),
+          fetch('/api/users'),
+          fetch('/api/entry-vouchers'),
+          fetch('/api/exit-vouchers')
         ]);
 
         if (!workersResponse.ok) {
@@ -235,7 +235,7 @@ const Personnel = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/${type}-vouchers/${voucherId}`);
+      const response = await fetch(`/api/${type}-vouchers/${voucherId}`);
       if (response.ok) {
         const fullVoucher = await response.json();
         return { ...voucher, ...fullVoucher };
@@ -328,7 +328,7 @@ const Personnel = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/workers', {
+      const response = await fetch('/api/workers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newWorker)
@@ -341,9 +341,9 @@ const Personnel = () => {
       
       // Refresh vouchers and users to update team sections
       const [usersResponse, entryResponse, exitResponse] = await Promise.all([
-        fetch('http://localhost:5000/api/users'),
-        fetch('http://localhost:5000/api/entry-vouchers'),
-        fetch('http://localhost:5000/api/exit-vouchers')
+        fetch('/api/users'),
+        fetch('/api/entry-vouchers'),
+        fetch('/api/exit-vouchers')
       ]);
 
       if (usersResponse.ok) {
@@ -411,7 +411,7 @@ const Personnel = () => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce travailleur?')) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/workers/${workerId}`, {
+      const response = await fetch(`/api/workers/${workerId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
@@ -428,10 +428,10 @@ const Personnel = () => {
       
       // Refresh data to update team sections
       const [workersResponse, usersResponse, entryResponse, exitResponse] = await Promise.all([
-        fetch('http://localhost:5000/api/workers'),
-        fetch('http://localhost:5000/api/users'),
-        fetch('http://localhost:5000/api/entry-vouchers'),
-        fetch('http://localhost:5000/api/exit-vouchers')
+        fetch('/api/workers'),
+        fetch('/api/users'),
+        fetch('/api/entry-vouchers'),
+        fetch('/api/exit-vouchers')
       ]);
 
       if (workersResponse.ok) {

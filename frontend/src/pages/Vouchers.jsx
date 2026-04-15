@@ -29,8 +29,8 @@ const Vouchers = () => {
         setError(null);
         
         const [entryResponse, exitResponse] = await Promise.all([
-          fetch('http://localhost:5000/api/entry-vouchers'),
-          fetch('http://localhost:5000/api/exit-vouchers')
+          fetch('/api/entry-vouchers'),
+          fetch('/api/exit-vouchers')
         ]);
         
         if (!entryResponse.ok || !exitResponse.ok) {
@@ -75,7 +75,7 @@ const Vouchers = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/${type}-vouchers/${voucherId}`);
+      const response = await fetch(`/api/${type}-vouchers/${voucherId}`);
       if (response.ok) {
         const details = await response.json();
         setSelectedVoucher(details);
