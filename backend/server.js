@@ -45,10 +45,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/workers', workerRoutes);
 app.use('/api/stock-items', stockItemRoutes);
 app.use('/api/product-catalog', productCatalogRoutes);
-app.use('/api/entry-vouchers', entryVoucherRoutes);
-app.use('/api/exit-vouchers', exitVoucherRoutes);
 app.use('/api/entry-vouchers/details', entryVoucherDetailsRoutes);
 app.use('/api/exit-vouchers/details', exitVoucherDetailsRoutes);
+app.use('/api/entry-vouchers', entryVoucherRoutes);
+app.use('/api/exit-vouchers', exitVoucherRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/orders', orderRoutes);
 

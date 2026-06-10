@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { FileText, Plus, Minus, Calendar, User, Package, Search, Eye } from 'lucide-react';
+import { FileText, Plus, Minus, Calendar, User, Package, Search, Eye, Lock, Trash2, X, AlertTriangle } from 'lucide-react';
 
 const Vouchers = () => {
   const [entryVouchers, setEntryVouchers] = useState([]);
@@ -12,6 +12,10 @@ const Vouchers = () => {
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [voucherDetails, setVoucherDetails] = useState({});
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinCode, setPinCode] = useState(['', '', '', '']);
+  const [pinError, setPinError] = useState(false);
 
   const toTitleCase = (value) => {
     if (!value) return null;
@@ -91,6 +95,61 @@ const Vouchers = () => {
       }
     } catch (err) {
       console.error('Error fetching voucher details:', err);
+    }
+  };
+
+  const handlePinChange = (index, value) => {
+    if (!/^\d*$/.test(value) || value.length > 1) return;
+    const newPin = [...pinCode];
+    newPin[index] = value;
+    setPinCode(newPin);
+    setPinError(false);
+    if (value && index < 3) document.getElementById(`vpin-${index + 1}`)?.focus();
+  };
+
+  const handlePinKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !pinCode[index] && index > 0)
+      document.getElementById(`vpin-${index - 1}`)?.focus();
+  };
+
+  const verifyPin = () => {
+    if (pinCode.join('') === '3738') {
+      setIsAdminMode(true);
+      setShowPinModal(false);
+      setPinCode(['', '', '', '']);
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setPinCode(['', '', '', '']);
+      document.getElementById('vpin-0')?.focus();
+    }
+  };
+
+  const deleteVoucher = async (voucherId, type) => {
+    if (!window.confirm(`Supprimer ce bon définitivement ?`)) return;
+    try {
+      const res = await fetch(`/api/${type}-vouchers/${voucherId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      if (type === 'entry') {
+        setEntryVouchers(prev => prev.filter(v => v.entry_id !== voucherId));
+      } else {
+        setExitVouchers(prev => prev.filter(v => v.exit_id !== voucherId));
+      }
+    } catch {
+      alert('Erreur lors de la suppression');
+    }
+  };
+
+  const resetAllVouchers = async () => {
+    const label = activeTab === 'entry' ? "tous les bons d'entrée" : 'tous les bons de sortie';
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer ${label} ? Cette action est irréversible.`)) return;
+    try {
+      const res = await fetch(`/api/${activeTab}-vouchers`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      if (activeTab === 'entry') setEntryVouchers([]);
+      else setExitVouchers([]);
+    } catch {
+      alert('Erreur lors de la réinitialisation');
     }
   };
 
@@ -305,7 +364,7 @@ const Vouchers = () => {
               />
             </div>
           </div>
-          
+
           {/* Personnel Filter */}
           <div className="sm:w-64">
             <div className="relative">
@@ -321,6 +380,36 @@ const Vouchers = () => {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Admin Button */}
+          <div className="flex items-center gap-2">
+            {isAdminMode ? (
+              <>
+                <button
+                  onClick={resetAllVouchers}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 text-sm font-medium"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Tout supprimer
+                </button>
+                <button
+                  onClick={() => setIsAdminMode(false)}
+                  className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2 text-sm font-medium"
+                >
+                  <X className="h-4 w-4" />
+                  Quitter
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowPinModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium"
+              >
+                <Lock className="h-4 w-4" />
+                Admin
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -458,20 +547,81 @@ const Vouchers = () => {
                       )}
                     </div>
                     
-                    <div className="flex space-x-2 ml-4">
-                    <button
+                    <div className="flex flex-col space-y-2 ml-4">
+                      <button
                         onClick={() => fetchVoucherDetails(voucherId, activeTab)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
-                    >
-                      <Eye className="h-4 w-4" />
-                      <span>Détails</span>
-                    </button>
-                  </div>
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span>Détails</span>
+                      </button>
+                      {isAdminMode && (
+                        <button
+                          onClick={() => deleteVoucher(voucherId, activeTab)}
+                          className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span>Supprimer</span>
+                        </button>
+                      )}
+                    </div>
                 </div>
               </div>
             </div>
             );
           })}
+        </div>
+      )}
+
+      {/* PIN Modal */}
+      {showPinModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl p-8 max-w-sm w-full">
+            <div className="text-center mb-6">
+              <Lock className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">Code d'accès Admin</h2>
+              <p className="text-slate-600">Entrez le code PIN à 4 chiffres</p>
+            </div>
+
+            <div className="flex justify-center gap-3 mb-4">
+              {[0, 1, 2, 3].map((index) => (
+                <input
+                  key={index}
+                  id={`vpin-${index}`}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength="1"
+                  value={pinCode[index]}
+                  onChange={(e) => handlePinChange(index, e.target.value)}
+                  onKeyDown={(e) => handlePinKeyDown(index, e)}
+                  className={`w-14 h-14 text-center text-2xl font-bold border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${pinError ? 'border-red-500' : 'border-slate-300'}`}
+                />
+              ))}
+            </div>
+
+            {pinError && (
+              <div className="flex items-center justify-center gap-2 text-red-600 text-sm mb-4">
+                <AlertTriangle className="h-4 w-4" />
+                <span>Code PIN incorrect</span>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowPinModal(false); setPinCode(['', '', '', '']); setPinError(false); }}
+                className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={verifyPin}
+                disabled={pinCode.join('').length !== 4}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
+              >
+                Vérifier
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

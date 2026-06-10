@@ -1208,13 +1208,16 @@ const Personnel = () => {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Rôle
                 </label>
-                <input
-                  type="text"
+                <select
                   value={newWorker.Role}
                   onChange={(e) => setNewWorker(prev => ({ ...prev, Role: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ex: Worker, Security, Foreman..."
-                />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Sélectionner un rôle</option>
+                  <option value="Depot">Dépôt</option>
+                  <option value="Bureau">Bureau</option>
+                  <option value="Security">Sécurité</option>
+                </select>
               </div>
             </div>
 

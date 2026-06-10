@@ -228,10 +228,14 @@ const BonEntree = () => {
 
       // Add each item to the voucher and stock
       for (const item of selectedItems) {
-        console.log('Processing item:', item);
-        
-        // Add item to stock (this will create new stock item or update existing)
-        // Note: place will be set when adding to voucher details
+        // Save/update in product catalog so it's remembered with correct unit next time
+        await axios.post('/api/product-catalog', {
+          item_name: item.item_name,
+          default_unit: item.unit,
+          notes: item.notes || ''
+        });
+
+        // Add item to stock (creates new or merges into existing)
         const stockResponse = await axios.post('/api/stock-items', {
           item_name: item.item_name,
           quantity: item.quantity,

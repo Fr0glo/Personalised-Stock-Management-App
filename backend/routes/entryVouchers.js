@@ -225,4 +225,31 @@ router.post('/', async (req, res) => {
   }
 });
 
+// DELETE single entry voucher
+router.delete('/:id', async (req, res) => {
+  try {
+    const voucher = await getRow('SELECT * FROM entryVouchers WHERE entry_id = ?', [req.params.id]);
+    if (!voucher) return res.status(404).json({ error: 'Bon introuvable' });
+
+    await runQuery('DELETE FROM entryDetails WHERE entry_id = ?', [req.params.id]);
+    await runQuery('DELETE FROM entryVouchers WHERE entry_id = ?', [req.params.id]);
+    res.json({ message: 'Bon supprimé' });
+  } catch (error) {
+    console.error('Error deleting entry voucher:', error);
+    res.status(500).json({ error: 'Failed to delete entry voucher' });
+  }
+});
+
+// DELETE all entry vouchers
+router.delete('/', async (req, res) => {
+  try {
+    await runQuery('DELETE FROM entryDetails', []);
+    await runQuery('DELETE FROM entryVouchers', []);
+    res.json({ message: 'Tous les bons d\'entrée supprimés' });
+  } catch (error) {
+    console.error('Error resetting entry vouchers:', error);
+    res.status(500).json({ error: 'Failed to reset entry vouchers' });
+  }
+});
+
 export default router; 

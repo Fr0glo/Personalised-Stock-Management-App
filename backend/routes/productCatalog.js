@@ -48,21 +48,37 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST add new product to catalog
+// POST add new product to catalog (upsert — if name exists, update unit)
 router.post('/', async (req, res) => {
   try {
     const { item_name, default_unit, default_price, notes } = req.body;
-    
+
     if (!item_name) {
       return res.status(400).json({ error: 'Product name is required' });
     }
-    
+
+    // Check if product already exists (case-insensitive)
+    const existing = await getRow(
+      'SELECT * FROM productCatalog WHERE LOWER(item_name) = LOWER(?)',
+      [item_name.trim()]
+    );
+
+    if (existing) {
+      // Update the unit (and price/notes if provided) so it's remembered
+      await runQuery(
+        'UPDATE productCatalog SET default_unit = ?, default_price = ?, notes = ? WHERE catalog_id = ?',
+        [default_unit || existing.default_unit, default_price ?? existing.default_price, notes ?? existing.notes, existing.catalog_id]
+      );
+      const updated = await getRow('SELECT * FROM productCatalog WHERE catalog_id = ?', [existing.catalog_id]);
+      return res.json(updated);
+    }
+
     const result = await runQuery(
       'INSERT INTO productCatalog (item_name, default_unit, default_price, notes) VALUES (?, ?, ?, ?)',
-      [item_name, default_unit || 'pcs', default_price, notes]
+      [item_name.trim(), default_unit || 'pcs', default_price, notes]
     );
-    
-    const createdProduct = await getRow('SELECT * FROM productCatalog WHERE catalog_id = ?', [result.lastID]);
+
+    const createdProduct = await getRow('SELECT * FROM productCatalog WHERE catalog_id = ?', [result.id]);
     res.status(201).json(createdProduct);
   } catch (error) {
     console.error('Error adding product to catalog:', error);

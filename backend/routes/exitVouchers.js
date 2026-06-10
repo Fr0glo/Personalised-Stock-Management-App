@@ -275,4 +275,31 @@ router.post('/', async (req, res) => {
   }
 });
 
+// DELETE single exit voucher
+router.delete('/:id', async (req, res) => {
+  try {
+    const voucher = await getRow('SELECT * FROM exitVouchers WHERE exit_id = ?', [req.params.id]);
+    if (!voucher) return res.status(404).json({ error: 'Bon introuvable' });
+
+    await runQuery('DELETE FROM exitDetails WHERE exit_id = ?', [req.params.id]);
+    await runQuery('DELETE FROM exitVouchers WHERE exit_id = ?', [req.params.id]);
+    res.json({ message: 'Bon supprimé' });
+  } catch (error) {
+    console.error('Error deleting exit voucher:', error);
+    res.status(500).json({ error: 'Failed to delete exit voucher' });
+  }
+});
+
+// DELETE all exit vouchers
+router.delete('/', async (req, res) => {
+  try {
+    await runQuery('DELETE FROM exitDetails', []);
+    await runQuery('DELETE FROM exitVouchers', []);
+    res.json({ message: 'Tous les bons de sortie supprimés' });
+  } catch (error) {
+    console.error('Error resetting exit vouchers:', error);
+    res.status(500).json({ error: 'Failed to reset exit vouchers' });
+  }
+});
+
 export default router; 
