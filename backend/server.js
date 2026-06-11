@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
+import { existsSync } from 'fs';
+import { startScheduler } from './database/scheduler.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -54,12 +56,25 @@ app.use('/api/orders', orderRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     message: 'Stock Management API is running',
     timestamp: new Date().toISOString()
   });
 });
+
+// Serve frontend in production
+const frontendPath = join(__dirname, '..', 'frontend', 'dist');
+if (existsSync(frontendPath)) {
+  app.use(express.static(frontendPath));
+  app.get('*', (req, res) => {
+    res.sendFile(join(frontendPath, 'index.html'));
+  });
+} else {
+  app.use('*', (req, res) => {
+    res.status(404).json({ error: 'Route not found' });
+  });
+}
 
 // Simple error handling
 app.use((err, req, res, next) => {
@@ -67,13 +82,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
-
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`API endpoint: http://localhost:${PORT}/api`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
+  console.log(`Network access: http://<server-ip>:${PORT}`);
+  startScheduler();
 });

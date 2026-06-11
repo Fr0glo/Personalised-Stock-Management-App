@@ -3,10 +3,29 @@ import { getAll, getRow, runQuery } from '../database/connection.js';
 
 const router = express.Router();
 
-// GET all users
+let usersSchemaEnsured = false;
+
+const ensureUsersSchema = async () => {
+  if (usersSchemaEnsured) return;
+  try {
+    const columns = await getAll('PRAGMA table_info(users)');
+    const columnNames = columns.map(col => col.name);
+    if (!columnNames.includes('is_deleted')) {
+      await runQuery('ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0');
+    }
+    usersSchemaEnsured = true;
+  } catch (error) {
+    console.error('Error ensuring users schema:', error);
+  }
+};
+
+// GET all users (only non-deleted)
 router.get('/', async (req, res) => {
   try {
-    const users = await getAll('SELECT * FROM users ORDER BY username');
+    await ensureUsersSchema();
+    const users = await getAll(
+      'SELECT * FROM users WHERE COALESCE(is_deleted, 0) = 0 ORDER BY username'
+    );
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -17,12 +36,16 @@ router.get('/', async (req, res) => {
 // GET single user
 router.get('/:id', async (req, res) => {
   try {
-    const user = await getRow('SELECT * FROM users WHERE user_id = ?', [req.params.id]);
-    
+    await ensureUsersSchema();
+    const user = await getRow(
+      'SELECT * FROM users WHERE user_id = ? AND COALESCE(is_deleted, 0) = 0',
+      [req.params.id]
+    );
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     res.json(user);
   } catch (error) {
     console.error('Error fetching user:', error);
@@ -82,16 +105,25 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE user
+// DELETE user (soft delete: hide from lists but keep name on past vouchers)
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await runQuery('DELETE FROM users WHERE user_id = ?', [req.params.id]);
-    
-    if (result.changes === 0) {
+    await ensureUsersSchema();
+    const user = await getRow(
+      'SELECT * FROM users WHERE user_id = ? AND COALESCE(is_deleted, 0) = 0',
+      [req.params.id]
+    );
+
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
-    res.json({ message: 'User deleted successfully' });
+
+    await runQuery('UPDATE users SET is_deleted = 1 WHERE user_id = ?', [req.params.id]);
+
+    res.json({
+      message: 'User removed from personnel (name kept on past vouchers)',
+      deletedUser: user.username
+    });
   } catch (error) {
     console.error('Error deleting user:', error);
     res.status(500).json({ error: 'Failed to delete user' });

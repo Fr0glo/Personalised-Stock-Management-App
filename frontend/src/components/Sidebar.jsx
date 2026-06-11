@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  Package, 
-  FileText, 
-  Users, 
+import {
+  Package,
+  FileText,
+  Users,
   ShoppingCart,
   LayoutDashboard,
   User,
@@ -18,7 +18,6 @@ const Sidebar = () => {
   const userMenuRef = useRef(null);
 
   useEffect(() => {
-    // Get user from localStorage
     const userStr = localStorage.getItem('user');
     if (userStr) {
       setCurrentUser(JSON.parse(userStr));
@@ -62,46 +61,35 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="w-64 bg-white shadow-lg flex flex-col">
-      {/* BTP STOCK Logo */}
-      <div className="p-6 border-b border-slate-200">
+    <div className="w-64 bg-navy-700 flex flex-col min-h-screen">
+      {/* Logo */}
+      <div className="p-6 border-b border-navy-600">
         <div className="flex items-center space-x-3">
-          {/* House Logo */}
-          <div className="flex items-center space-x-1">
-            <div className="w-8 h-6 relative">
-              {/* Left House */}
-              <div className="absolute left-0 bottom-0 w-4 h-4 bg-slate-800 rounded-t-sm"></div>
-              <div className="absolute left-0 bottom-0 w-4 h-3 bg-white rounded-t-sm"></div>
-              <div className="absolute left-1 bottom-1 w-1 h-1 bg-slate-800 rounded-sm"></div>
-              {/* Right House */}
-              <div className="absolute right-0 bottom-0 w-3 h-3 bg-slate-800 rounded-t-sm"></div>
-              <div className="absolute right-0 bottom-0 w-3 h-2 bg-white rounded-t-sm"></div>
-              <div className="absolute right-0.5 bottom-0.5 w-0.5 h-0.5 bg-slate-800 rounded-sm"></div>
-              {/* Connecting Base */}
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-800 rounded-full"></div>
-            </div>
+          <img src="/btp_logo_icon_512_transparent.png" alt="BTP Oulime" className="w-14 h-14 object-contain" />
+          <div>
+            <h1 className="text-lg font-display font-bold text-white tracking-wide">
+              BTP OULIME
+            </h1>
+            <p className="text-[10px] text-navy-300 tracking-widest uppercase">Gestion de Stock</p>
           </div>
-          <h1 className="text-xl font-display font-semibold text-slate-800 tracking-wide">
-            BTP STOCK
-          </h1>
         </div>
       </div>
 
       {/* Navigation Items */}
       <nav className="flex-1 p-4">
-        <ul className="space-y-2">
+        <ul className="space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
-            
+
             return (
               <li key={item.path}>
                 <Link
                   to={item.path}
                   className={`flex items-center px-4 py-3 rounded-lg transition-all duration-200 ${
                     isActive
-                      ? 'bg-slate-50 text-slate-800 border-r-2 border-slate-600 shadow-sm'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
+                      ? 'bg-brand-orange text-white shadow-sm font-medium'
+                      : 'text-navy-200 hover:bg-navy-600 hover:text-white'
                   }`}
                 >
                   <Icon className="w-5 h-5 mr-3" />
@@ -114,10 +102,10 @@ const Sidebar = () => {
       </nav>
 
       {/* User Menu at Bottom */}
-      <div className="p-4 border-t border-slate-200" ref={userMenuRef}>
+      <div className="p-4 border-t border-navy-600" ref={userMenuRef}>
         <div className="relative">
           <button
-            className="w-full flex items-center px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200"
+            className="w-full flex items-center px-4 py-3 rounded-lg text-navy-200 hover:bg-navy-600 hover:text-white transition-all duration-200"
             onClick={() => setIsUserMenuOpen((v) => !v)}
             aria-haspopup="menu"
             aria-expanded={isUserMenuOpen}
@@ -137,7 +125,7 @@ const Sidebar = () => {
                 <div className="px-4 py-2 text-xs text-slate-500 select-none" role="none">
                   Connecté en tant que
                 </div>
-                <div className="px-4 pb-2 text-sm text-slate-700 font-medium truncate" role="none">
+                <div className="px-4 pb-2 text-sm text-navy-700 font-medium truncate" role="none">
                   {currentUser?.username || 'Guest'}
                 </div>
                 <div className="h-px bg-slate-200 my-1" />
@@ -158,4 +146,4 @@ const Sidebar = () => {
   );
 };
 
-export default Sidebar; 
+export default Sidebar;

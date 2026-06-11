@@ -50,36 +50,36 @@ const Dashboard = () => {
     <div className="space-y-8">
       {/* Page Title */}
       <div>
-        <h1 className="text-3xl font-bold text-slate-800">Tableau de bord</h1>
-        <p className="text-slate-600 mt-2">Gestion de stock BTP</p>
+        <h1 className="text-3xl font-bold text-navy-700">Tableau de bord</h1>
+        <p className="text-navy-400 mt-2">Gestion de stock BTP</p>
       </div>
 
       {/* Two Prominent Action Buttons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Bon d'entrée Button */}
-        <button 
+        <button
           onClick={() => navigate('/bon-entree')}
-          className="bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+          className="bg-navy-700 hover:bg-navy-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
         >
           <div className="flex items-center justify-center space-x-4">
             <Plus className="w-12 h-12" />
             <div className="text-left">
               <h2 className="text-2xl font-bold">Bon d'entrée</h2>
-              <p className="text-slate-200">Ajouter du stock</p>
+              <p className="text-navy-200">Ajouter du stock</p>
             </div>
           </div>
         </button>
 
         {/* Bon de sortie Button */}
-        <button 
+        <button
           onClick={() => navigate('/bon-sortie')}
-          className="bg-slate-700 hover:bg-slate-800 text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+          className="bg-brand-orange hover:bg-brand-orange-dark text-white p-8 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
         >
           <div className="flex items-center justify-center space-x-4">
             <Minus className="w-12 h-12" />
             <div className="text-left">
               <h2 className="text-2xl font-bold">Bon de sortie</h2>
-              <p className="text-slate-200">Retirer du stock</p>
+              <p className="text-orange-100">Retirer du stock</p>
             </div>
           </div>
         </button>
@@ -88,13 +88,13 @@ const Dashboard = () => {
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Stock Statistics */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 hover:shadow-lg transition-shadow duration-300">
+        <div className="bg-white p-6 rounded-xl shadow-md border border-brand-cream-dark hover:shadow-lg transition-shadow duration-300">
           <div className="flex items-center space-x-4">
-            <div className="p-3 bg-slate-100 rounded-lg">
-              <Warehouse className="w-8 h-8 text-slate-700" />
+            <div className="p-3 bg-navy-50 rounded-lg">
+              <Warehouse className="w-8 h-8 text-navy-700" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-800">
+              <h3 className="text-lg font-semibold text-navy-700">
                 Nombre de stock valable
               </h3>
               {isLoading ? (
@@ -102,9 +102,9 @@ const Dashboard = () => {
               ) : error ? (
                 <p className="text-lg font-bold text-red-500">Erreur</p>
               ) : (
-                <p className="text-3xl font-bold text-slate-700">{stockNumber}</p>
+                <p className="text-3xl font-bold text-navy-700">{stockNumber}</p>
               )}
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-navy-400">
                 {isLoading ? 'Chargement...' : error ? error : 'Articles en stock'}
               </p>
             </div>
@@ -112,13 +112,13 @@ const Dashboard = () => {
         </div>
 
         {/* Personnel Statistics */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 hover:shadow-lg transition-shadow duration-300">
+        <div className="bg-white p-6 rounded-xl shadow-md border border-brand-cream-dark hover:shadow-lg transition-shadow duration-300">
           <div className="flex items-center space-x-4">
-            <div className="p-3 bg-emerald-100 rounded-lg">
-              <Home className="w-8 h-8 text-emerald-600" />
+            <div className="p-3 bg-orange-50 rounded-lg">
+              <Home className="w-8 h-8 text-brand-orange" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-800">
+              <h3 className="text-lg font-semibold text-navy-700">
                 Nombre de personnel actif
               </h3>
               {isLoading ? (
@@ -126,9 +126,9 @@ const Dashboard = () => {
               ) : error ? (
                 <p className="text-lg font-bold text-red-500">Erreur</p>
               ) : (
-                <p className="text-3xl font-bold text-emerald-600">{personnelCount}</p>
+                <p className="text-3xl font-bold text-brand-orange">{personnelCount}</p>
               )}
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-navy-400">
                 {isLoading ? 'Chargement...' : error ? error : 'Employés actifs'}
               </p>
             </div>

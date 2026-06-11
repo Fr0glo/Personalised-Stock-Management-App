@@ -26,11 +26,9 @@ const Login = () => {
       const data = await response.json();
 
       if (response.ok) {
-        // Store user info in localStorage
         localStorage.setItem('user', JSON.stringify(data.user));
         localStorage.setItem('isAuthenticated', 'true');
 
-        // Redirect based on user role
         if (data.user.role === 'security') {
           navigate('/security');
         } else {
@@ -48,32 +46,21 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
+    <div className="min-h-screen bg-brand-cream flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md border border-brand-cream-dark">
         {/* Logo/Header */}
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center space-x-3 mb-4">
-            <div className="flex items-center space-x-1">
-              <div className="w-8 h-6 relative">
-                <div className="absolute left-0 bottom-0 w-4 h-4 bg-slate-800 rounded-t-sm"></div>
-                <div className="absolute left-0 bottom-0 w-4 h-3 bg-white rounded-t-sm"></div>
-                <div className="absolute left-1 bottom-1 w-1 h-1 bg-slate-800 rounded-sm"></div>
-                <div className="absolute right-0 bottom-0 w-3 h-3 bg-slate-800 rounded-t-sm"></div>
-                <div className="absolute right-0 bottom-0 w-3 h-2 bg-white rounded-t-sm"></div>
-                <div className="absolute right-0.5 bottom-0.5 w-0.5 h-0.5 bg-slate-800 rounded-sm"></div>
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-800 rounded-full"></div>
-              </div>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-800">BTP STOCK</h1>
-          </div>
-          <p className="text-slate-600">Connexion au système</p>
+          <img src="/btp_logo_icon_512_transparent.png" alt="BTP Oulime" className="w-24 h-24 object-contain mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-navy-700">BTP OULIME</h1>
+          <p className="text-xs text-navy-400 tracking-widest uppercase mt-1">Gestion de Stock</p>
+          <p className="text-slate-500 mt-3">Connexion au système</p>
         </div>
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-6">
           {/* Username */}
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="username" className="block text-sm font-medium text-navy-700 mb-2">
               Nom d'utilisateur
             </label>
             <div className="relative">
@@ -83,7 +70,7 @@ const Login = () => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent"
                 placeholder="Entrez votre nom d'utilisateur"
                 required
                 autoComplete="username"
@@ -93,7 +80,7 @@ const Login = () => {
 
           {/* Password */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="password" className="block text-sm font-medium text-navy-700 mb-2">
               Mot de passe
             </label>
             <div className="relative">
@@ -103,7 +90,7 @@ const Login = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent"
                 placeholder="Entrez votre mot de passe"
                 required
                 autoComplete="current-password"
@@ -122,7 +109,7 @@ const Login = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-slate-700 hover:bg-slate-800 text-white py-2 px-4 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-navy-700 hover:bg-navy-800 text-white py-2 px-4 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
@@ -143,8 +130,3 @@ const Login = () => {
 };
 
 export default Login;
-
-
-
-
-

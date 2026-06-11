@@ -1,31 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Users, User, Package, Search, Eye, Plus, Minus, FileText, Badge, Trash2, X } from 'lucide-react';
+import { Users, User, Package, Search, Eye, Plus, Minus, FileText, Badge, Trash2, X, Lock } from 'lucide-react';
 
-const BUREAU_TEAM = [
-  {
-    id: 'rachida',
-    displayName: 'Rachida',
-    aliases: ['rachida']
-  },
-  {
-    id: 'touria',
-    displayName: 'Touria',
-    aliases: ['touria']
-  },
-  {
-    id: 'brahim-bureau',
-    displayName: 'Brahim',
-    aliases: ['brahim', 'brahim bahessin', 'brahim bahessi', 'brahim bahessine', 'brahim bahssi']
-  }
-];
-
-const SECURITY_TEAM = [
-  {
-    id: 'security',
-    displayName: 'Security',
-    aliases: ['security']
-  }
-];
 
 const Personnel = () => {
   const [workers, setWorkers] = useState([]);
@@ -45,6 +20,9 @@ const Personnel = () => {
   const [showStaffDetails, setShowStaffDetails] = useState(false);
   const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
   const [newWorker, setNewWorker] = useState({ F_Name: '', Surname: '', Carte_National: '', Role: '' });
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinCode, setPinCode] = useState(['', '', '', '']);
 
   const toTitleCase = (value) => {
     if (!value) return '';
@@ -129,6 +107,71 @@ const Personnel = () => {
     });
   };
 
+  const handlePinChange = (index, value) => {
+    if (value.length > 1) return;
+    if (!/^\d*$/.test(value)) return;
+    const newPin = [...pinCode];
+    newPin[index] = value;
+    setPinCode(newPin);
+    if (value && index < 3) {
+      const nextInput = document.getElementById(`personnel-pin-${index + 1}`);
+      if (nextInput) nextInput.focus();
+    }
+  };
+
+  const handlePinKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !pinCode[index] && index > 0) {
+      const prevInput = document.getElementById(`personnel-pin-${index - 1}`);
+      if (prevInput) prevInput.focus();
+    }
+  };
+
+  const verifyPin = () => {
+    const enteredPin = pinCode.join('');
+    if (enteredPin === '3739') {
+      setIsEditMode(true);
+      setShowPinModal(false);
+      setPinCode(['', '', '', '']);
+    } else {
+      alert('Code PIN incorrect');
+      setPinCode(['', '', '', '']);
+    }
+  };
+
+  const rebuildTeams = (usersData, workersData, entryData, exitData) => {
+    const bureauUsers = usersData.filter(u => u.role === 'admin').map(u => ({
+      id: `user-${u.user_id}`,
+      displayName: u.username,
+      aliases: [u.username.toLowerCase()]
+    }));
+    const bureauWorkers = workersData.filter(w =>
+      w.Role && w.Role.toLowerCase().includes('bureau')
+    ).map(w => ({
+      id: `worker-${w.worker_id}`,
+      displayName: `${w.F_Name} ${w.Surname}`,
+      aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
+    }));
+    setBureauStaff(buildStaffSummaries([...bureauUsers, ...bureauWorkers], matchesBureauStaff, entryData, exitData, 'bureau'));
+
+    const depotWorkers = workersData.filter(w => {
+      const role = (w.Role || '').toLowerCase();
+      return role.includes('depot') || role.includes('worker') || role.includes('dépôt') ||
+             (!role.includes('bureau') && !role.includes('security') && w.Role);
+    }).map(w => ({
+      id: `worker-${w.worker_id}`,
+      displayName: `${w.F_Name} ${w.Surname}`,
+      aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
+    }));
+    setDepotStaff(buildStaffSummaries(depotWorkers, matchesDepotStaff, entryData, exitData, 'depot'));
+
+    const securityUsers = usersData.filter(u => u.role === 'security').map(u => ({
+      id: `user-${u.user_id}`,
+      displayName: u.username,
+      aliases: [u.username.toLowerCase()]
+    }));
+    setSecurityStaff(buildStaffSummaries(securityUsers, matchesSecurityStaff, entryData, exitData, 'security'));
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -149,23 +192,10 @@ const Personnel = () => {
         const workersData = await workersResponse.json();
         setWorkers(workersData);
 
-        // Fetch users (Rachida, Touria, Brahim)
+        let usersData = [];
         if (usersResponse.ok) {
-          const usersData = await usersResponse.json();
-          // Filter to show only bureau/admin users (Rachida, Touria, Brahim)
-          // Remove duplicates and normalize names (remove Touriya, keep only Touria)
-          const bureauUsers = usersData.filter(u => {
-            const username = u.username.toLowerCase();
-            // Exclude Touriya (keep only Touria)
-            if (username === 'touriya') return false;
-            return u.role === 'admin' || username === 'rachida' || 
-                   username === 'touria' || username === 'brahim';
-          });
-          // Remove duplicates by username (normalized)
-          const uniqueUsers = bureauUsers.filter((user, index, self) =>
-            index === self.findIndex(u => u.username.toLowerCase() === user.username.toLowerCase())
-          );
-          setUsers(uniqueUsers);
+          usersData = await usersResponse.json();
+          setUsers(usersData);
         }
 
         let entryData = [];
@@ -186,21 +216,26 @@ const Personnel = () => {
         setEntryVouchers(entryData);
         setExitVouchers(exitData);
         
-        // Build bureau team: hardcoded members + workers with Role="bureau"
-        const bureauWorkers = workersData.filter(w => 
+        // Build bureau team from users with role 'admin' + workers with Role="bureau"
+        const bureauUsers = usersData.filter(u => u.role === 'admin').map(u => ({
+          id: `user-${u.user_id}`,
+          displayName: u.username,
+          aliases: [u.username.toLowerCase()]
+        }));
+        const bureauWorkers = workersData.filter(w =>
           w.Role && w.Role.toLowerCase().includes('bureau')
         ).map(w => ({
           id: `worker-${w.worker_id}`,
           displayName: `${w.F_Name} ${w.Surname}`,
           aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
         }));
-        const allBureauTeam = [...BUREAU_TEAM, ...bureauWorkers];
+        const allBureauTeam = [...bureauUsers, ...bureauWorkers];
         setBureauStaff(buildStaffSummaries(allBureauTeam, matchesBureauStaff, entryData, exitData, 'bureau'));
-        
+
         // Build depot team: workers with Role containing "depot", "worker", or similar
         const depotWorkers = workersData.filter(w => {
           const role = (w.Role || '').toLowerCase();
-          return role.includes('depot') || role.includes('worker') || role.includes('dépôt') || 
+          return role.includes('depot') || role.includes('worker') || role.includes('dépôt') ||
                  (!role.includes('bureau') && !role.includes('security') && w.Role);
         }).map(w => ({
           id: `worker-${w.worker_id}`,
@@ -208,8 +243,14 @@ const Personnel = () => {
           aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
         }));
         setDepotStaff(buildStaffSummaries(depotWorkers, matchesDepotStaff, entryData, exitData, 'depot'));
-        
-        setSecurityStaff(buildStaffSummaries(SECURITY_TEAM, matchesSecurityStaff, entryData, exitData, 'security'));
+
+        // Build security team from users with role 'security'
+        const securityUsers = usersData.filter(u => u.role === 'security').map(u => ({
+          id: `user-${u.user_id}`,
+          displayName: u.username,
+          aliases: [u.username.toLowerCase()]
+        }));
+        setSecurityStaff(buildStaffSummaries(securityUsers, matchesSecurityStaff, entryData, exitData, 'security'));
       } catch (err) {
         console.error('Error fetching personnel data:', err);
         setError('Failed to load personnel data');
@@ -339,70 +380,62 @@ const Personnel = () => {
       const addedWorker = await response.json();
       setWorkers(prev => [...prev, addedWorker]);
       
-      // Refresh vouchers and users to update team sections
-      const [usersResponse, entryResponse, exitResponse] = await Promise.all([
+      // Refresh all data to rebuild teams
+      const [usersRes, entryRes, exitRes] = await Promise.all([
         fetch('/api/users'),
         fetch('/api/entry-vouchers'),
         fetch('/api/exit-vouchers')
       ]);
 
-      if (usersResponse.ok) {
-        const usersData = await usersResponse.json();
-        // Filter and remove duplicates (exclude Touriya, keep only Touria)
-        const bureauUsers = usersData.filter(u => {
-          const username = u.username.toLowerCase();
-          if (username === 'touriya') return false;
-          return u.role === 'admin' || username === 'rachida' || 
-                 username === 'touria' || username === 'brahim';
-        });
-        // Remove duplicates by username (normalized)
-        const uniqueUsers = bureauUsers.filter((user, index, self) =>
-          index === self.findIndex(u => u.username.toLowerCase() === user.username.toLowerCase())
-        );
-        setUsers(uniqueUsers);
-      }
+      const refreshedUsers = usersRes.ok ? await usersRes.json() : users;
+      setUsers(refreshedUsers);
 
-      let entryData = [];
-      let exitData = [];
-
-      if (entryResponse.ok) {
-        entryData = await entryResponse.json();
-      }
-      if (exitResponse.ok) {
-        exitData = await exitResponse.json();
-      }
-
+      const entryData = entryRes.ok ? await entryRes.json() : entryVouchers;
+      const exitData = exitRes.ok ? await exitRes.json() : exitVouchers;
       setEntryVouchers(entryData);
       setExitVouchers(exitData);
-      
-      // Rebuild teams with new worker
+
       const updatedWorkers = [...workers, addedWorker];
-      const bureauWorkers = updatedWorkers.filter(w => 
-        w.Role && w.Role.toLowerCase().includes('bureau')
-      ).map(w => ({
-        id: `worker-${w.worker_id}`,
-        displayName: `${w.F_Name} ${w.Surname}`,
-        aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
-      }));
-      const allBureauTeam = [...BUREAU_TEAM, ...bureauWorkers];
-      setBureauStaff(buildStaffSummaries(allBureauTeam, matchesBureauStaff, entryData, exitData, 'bureau'));
-      
-      const depotWorkers = updatedWorkers.filter(w => {
-        const role = (w.Role || '').toLowerCase();
-        return role.includes('depot') || role.includes('worker') || role.includes('dépôt') || 
-               (!role.includes('bureau') && !role.includes('security') && w.Role);
-      }).map(w => ({
-        id: `worker-${w.worker_id}`,
-        displayName: `${w.F_Name} ${w.Surname}`,
-        aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
-      }));
-      setDepotStaff(buildStaffSummaries(depotWorkers, matchesDepotStaff, entryData, exitData, 'depot'));
-      
+      rebuildTeams(refreshedUsers, updatedWorkers, entryData, exitData);
+
       setShowAddWorkerModal(false);
       setNewWorker({ F_Name: '', Surname: '', Carte_National: '', Role: '' });
     } catch (error) {
       console.error('Error adding worker:', error);
       alert('Erreur lors de l\'ajout du travailleur');
+    }
+  };
+
+  // Delete user (soft delete)
+  const deleteUser = async (userId) => {
+    if (!window.confirm('Supprimer cet utilisateur ? Son nom restera sur les bons existants.')) return;
+
+    try {
+      const response = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete user');
+      }
+
+      const [workersRes, usersRes, entryRes, exitRes] = await Promise.all([
+        fetch('/api/workers'),
+        fetch('/api/users'),
+        fetch('/api/entry-vouchers'),
+        fetch('/api/exit-vouchers')
+      ]);
+
+      const refreshedWorkers = workersRes.ok ? await workersRes.json() : workers;
+      setWorkers(refreshedWorkers);
+      const refreshedUsers = usersRes.ok ? await usersRes.json() : users.filter(u => u.user_id !== userId);
+      setUsers(refreshedUsers);
+      const entryData = entryRes.ok ? await entryRes.json() : entryVouchers;
+      const exitData = exitRes.ok ? await exitRes.json() : exitVouchers;
+      setEntryVouchers(entryData);
+      setExitVouchers(exitData);
+      rebuildTeams(refreshedUsers, refreshedWorkers, entryData, exitData);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert(`Erreur: ${error.message}`);
     }
   };
 
@@ -426,72 +459,26 @@ const Personnel = () => {
       // Remove from state
       setWorkers(prev => prev.filter(worker => worker.worker_id !== workerId));
       
-      // Refresh data to update team sections
-      const [workersResponse, usersResponse, entryResponse, exitResponse] = await Promise.all([
+      // Refresh all data and rebuild teams
+      const [workersRes, usersRes, entryRes, exitRes] = await Promise.all([
         fetch('/api/workers'),
         fetch('/api/users'),
         fetch('/api/entry-vouchers'),
         fetch('/api/exit-vouchers')
       ]);
 
-      if (workersResponse.ok) {
-        const workersData = await workersResponse.json();
-        setWorkers(workersData);
-      }
+      const refreshedWorkers = workersRes.ok ? await workersRes.json() : workers.filter(w => w.worker_id !== workerId);
+      setWorkers(refreshedWorkers);
 
-      if (usersResponse.ok) {
-        const usersData = await usersResponse.json();
-        // Filter and remove duplicates (exclude Touriya, keep only Touria)
-        const bureauUsers = usersData.filter(u => {
-          const username = u.username.toLowerCase();
-          if (username === 'touriya') return false;
-          return u.role === 'admin' || username === 'rachida' || 
-                 username === 'touria' || username === 'brahim';
-        });
-        // Remove duplicates by username (normalized)
-        const uniqueUsers = bureauUsers.filter((user, index, self) =>
-          index === self.findIndex(u => u.username.toLowerCase() === user.username.toLowerCase())
-        );
-        setUsers(uniqueUsers);
-      }
+      const refreshedUsers = usersRes.ok ? await usersRes.json() : users;
+      setUsers(refreshedUsers);
 
-      let entryData = [];
-      let exitData = [];
-
-      if (entryResponse.ok) {
-        entryData = await entryResponse.json();
-      }
-      if (exitResponse.ok) {
-        exitData = await exitResponse.json();
-      }
-
+      const entryData = entryRes.ok ? await entryRes.json() : entryVouchers;
+      const exitData = exitRes.ok ? await exitRes.json() : exitVouchers;
       setEntryVouchers(entryData);
       setExitVouchers(exitData);
-      
-      // Rebuild teams
-      if (workersResponse.ok) {
-        const workersData = await workersResponse.json();
-        const bureauWorkers = workersData.filter(w => 
-          w.Role && w.Role.toLowerCase().includes('bureau')
-        ).map(w => ({
-          id: `worker-${w.worker_id}`,
-          displayName: `${w.F_Name} ${w.Surname}`,
-          aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
-        }));
-        const allBureauTeam = [...BUREAU_TEAM, ...bureauWorkers];
-        setBureauStaff(buildStaffSummaries(allBureauTeam, matchesBureauStaff, entryData, exitData, 'bureau'));
-        
-        const depotWorkers = workersData.filter(w => {
-          const role = (w.Role || '').toLowerCase();
-          return role.includes('depot') || role.includes('worker') || role.includes('dépôt') || 
-                 (!role.includes('bureau') && !role.includes('security') && w.Role);
-        }).map(w => ({
-          id: `worker-${w.worker_id}`,
-          displayName: `${w.F_Name} ${w.Surname}`,
-          aliases: [w.F_Name.toLowerCase(), w.Surname.toLowerCase(), `${w.F_Name} ${w.Surname}`.toLowerCase()]
-        }));
-        setDepotStaff(buildStaffSummaries(depotWorkers, matchesDepotStaff, entryData, exitData, 'depot'));
-      }
+
+      rebuildTeams(refreshedUsers, refreshedWorkers, entryData, exitData);
     } catch (error) {
       console.error('Error deleting worker:', error);
       alert(`Erreur lors de la suppression du travailleur: ${error.message}`);
@@ -534,7 +521,7 @@ const Personnel = () => {
         </p>
       </div>
 
-      {/* Search Bar and Add Button */}
+      {/* Search Bar and Admin Editing */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div className="flex gap-4">
           <div className="flex-1 relative">
@@ -547,13 +534,34 @@ const Personnel = () => {
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent"
             />
           </div>
-          <button
-            onClick={() => setShowAddWorkerModal(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Ajouter un travailleur
-          </button>
+          <div className="flex items-center gap-2">
+            {isEditMode ? (
+              <>
+                <button
+                  onClick={() => setShowAddWorkerModal(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Ajouter
+                </button>
+                <button
+                  onClick={() => setIsEditMode(false)}
+                  className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  Quitter
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowPinModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                <Lock className="h-4 w-4" />
+                Admin Editing
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -844,18 +852,31 @@ const Personnel = () => {
                         <Eye className="h-4 w-4" />
                         <span>Voir l'historique</span>
                       </button>
-                      <button
-                        onClick={() => deleteWorker(person.worker_id)}
-                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
-                        title="Supprimer le travailleur"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {isEditMode && (
+                        <button
+                          onClick={() => deleteWorker(person.worker_id)}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                          title="Supprimer le travailleur"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </>
                   )}
                   {person.type === 'user' && (
-                    <div className="w-full text-center text-sm text-slate-500 py-2">
-                      Membre du bureau
+                    <div className="flex gap-2 w-full">
+                      <div className="flex-1 text-center text-sm text-slate-500 py-2">
+                        Membre du bureau
+                      </div>
+                      {isEditMode && (
+                        <button
+                          onClick={() => deleteUser(person.user_id)}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                          title="Supprimer l'utilisateur"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1236,6 +1257,54 @@ const Personnel = () => {
                 className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
               >
                 Ajouter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIN Code Modal */}
+      {showPinModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl p-8 max-w-md w-full">
+            <div className="text-center mb-6">
+              <Lock className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">Code d'accès Admin</h2>
+              <p className="text-slate-600">Entrez le code PIN à 4 chiffres</p>
+            </div>
+
+            <div className="flex justify-center gap-3 mb-6">
+              {[0, 1, 2, 3].map((index) => (
+                <input
+                  key={index}
+                  id={`personnel-pin-${index}`}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength="1"
+                  value={pinCode[index]}
+                  onChange={(e) => handlePinChange(index, e.target.value)}
+                  onKeyDown={(e) => handlePinKeyDown(index, e)}
+                  className="w-16 h-16 text-center text-2xl font-bold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowPinModal(false);
+                  setPinCode(['', '', '', '']);
+                }}
+                className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={verifyPin}
+                disabled={pinCode.join('').length !== 4}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
+              >
+                Vérifier
               </button>
             </div>
           </div>
