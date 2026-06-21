@@ -31,6 +31,8 @@ const Login = () => {
 
         if (data.user.role === 'security') {
           navigate('/security');
+        } else if (data.user.role === 'superadmin') {
+          navigate('/analyse');
         } else {
           navigate('/');
         }

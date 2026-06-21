@@ -14,6 +14,15 @@ const Stock = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newItem, setNewItem] = useState({ item_name: '', quantity: 0, unit: 'pcs', notes: '' });
 
+  // The logged-in user, so manual stock edits can be recorded against them.
+  const getCurrentUser = () => {
+    try {
+      return JSON.parse(localStorage.getItem('user')) || null;
+    } catch {
+      return null;
+    }
+  };
+
   useEffect(() => {
     const fetchStockItems = async () => {
       try {
@@ -61,11 +70,18 @@ const Stock = () => {
     });
   }, [stockItems, searchTerm, filterUnit]);
 
-  // Get stock status based on quantity
+  // Split into items in stock vs. épuisé (0). Épuisé items only appear in
+  // Admin Editing mode, grouped separately so they don't mix with real stock.
+  const inStockItems = useMemo(() => filteredItems.filter(item => item.quantity > 0), [filteredItems]);
+  const epuiseItems = useMemo(() => filteredItems.filter(item => item.quantity <= 0), [filteredItems]);
+
+  // Get stock status based on quantity.
+  // Uses literal Tailwind class names (not `bg-${color}-50`) so the build
+  // actually generates them — dynamic class strings get purged otherwise.
   const getStockStatus = (quantity) => {
-    if (quantity === 0) return { status: 'out', color: 'red', icon: AlertTriangle, text: 'Rupture' };
-    if (quantity < 10) return { status: 'low', color: 'orange', icon: AlertTriangle, text: 'Stock faible' };
-    return { status: 'good', color: 'green', icon: CheckCircle, text: 'En stock' };
+    if (quantity === 0) return { status: 'out', icon: AlertTriangle, text: 'Rupture', headerBg: 'bg-red-50', accentText: 'text-red-600' };
+    if (quantity < 10) return { status: 'low', icon: AlertTriangle, text: 'Stock faible', headerBg: 'bg-orange-50', accentText: 'text-orange-600' };
+    return { status: 'good', icon: CheckCircle, text: 'En stock', headerBg: 'bg-green-50', accentText: 'text-green-600' };
   };
 
   // Handle PIN code input
@@ -95,7 +111,7 @@ const Stock = () => {
   // Verify PIN and enable edit mode
   const verifyPin = () => {
     const enteredPin = pinCode.join('');
-    if (enteredPin === '3738') {
+    if (enteredPin === '3739') {
       setIsEditMode(true);
       setShowPinModal(false);
       setPinCode(['', '', '', '']);
@@ -117,12 +133,17 @@ const Stock = () => {
       const item = stockItems.find(i => i.item_id === itemId);
       if (!item) return;
 
+      const currentUser = getCurrentUser();
       const updateData = {
         item_name: item.item_name,
         quantity: updates.quantity !== undefined ? parseInt(updates.quantity) || 0 : item.quantity,
         unit: updates.unit !== undefined ? updates.unit : item.unit,
         notes: item.notes || '',
-        is_dynamic: item.is_dynamic !== undefined ? item.is_dynamic : 1
+        is_dynamic: item.is_dynamic !== undefined ? item.is_dynamic : 1,
+        // Unit price (for stock valuation). Empty clears to 0.
+        price: updates.price !== undefined ? (parseFloat(updates.price) || 0) : item.price,
+        // Record who made the change for the audit trail
+        edited_by: currentUser?.user_id ?? currentUser?.username ?? null
       };
 
       const response = await fetch(`/api/stock-items/${itemId}`, {
@@ -362,6 +383,187 @@ const Stock = () => {
     );
   }
 
+  // One stock item card — reused for both the in-stock and épuisé groups.
+  const renderStockCard = (item) => {
+    const stockStatus = getStockStatus(item.quantity);
+    const StatusIcon = stockStatus.icon;
+
+    return (
+      <div
+        key={item.item_id}
+        className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow duration-300 overflow-hidden"
+      >
+        {/* Card Header with Status */}
+        <div className={`p-4 border-b border-slate-100 ${stockStatus.headerBg}`}>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h3 className="font-semibold text-slate-800 text-lg leading-tight">
+                {item.item_name}
+              </h3>
+              <div className="flex items-center space-x-2 mt-2">
+                <StatusIcon className={`h-4 w-4 ${stockStatus.accentText}`} />
+                <span className={`text-sm font-medium ${stockStatus.accentText}`}>
+                  {stockStatus.text}
+                </span>
+              </div>
+            </div>
+            <Package className="h-8 w-8 text-slate-400" />
+          </div>
+        </div>
+
+        {/* Card Body */}
+        <div className="p-4 space-y-3">
+          {/* Quantity */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600">Quantité</span>
+            {isEditMode && editingItems[item.item_id] ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={editingItems[item.item_id].quantity || ''}
+                  onChange={(e) => setEditingItems(prev => ({
+                    ...prev,
+                    [item.item_id]: {
+                      ...prev[item.item_id],
+                      quantity: e.target.value
+                    }
+                  }))}
+                  className="w-20 px-2 py-1 border border-slate-300 rounded text-sm"
+                />
+                <button
+                  onClick={() => updateItem(item.item_id, {
+                    quantity: editingItems[item.item_id].quantity,
+                    unit: editingItems[item.item_id].unit,
+                    price: editingItems[item.item_id].price
+                  })}
+                  className="p-1 bg-green-600 text-white rounded hover:bg-green-700"
+                  title="Enregistrer"
+                >
+                  <Save className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => setEditingItems(prev => {
+                    const newState = { ...prev };
+                    delete newState[item.item_id];
+                    return newState;
+                  })}
+                  className="p-1 bg-slate-400 text-white rounded hover:bg-slate-500"
+                  title="Annuler"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-bold text-slate-800">
+                  {item.quantity}
+                </span>
+                {isEditMode && (
+                  <button
+                    onClick={() => setEditingItems(prev => ({
+                      ...prev,
+                      [item.item_id]: {
+                        quantity: item.quantity,
+                        unit: item.unit,
+                        price: item.price ?? ''
+                      }
+                    }))}
+                    className="p-1 text-blue-600 hover:text-blue-800"
+                    title="Modifier"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Unit */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600">Unité</span>
+            {isEditMode && editingItems[item.item_id] ? (
+              <input
+                type="text"
+                value={editingItems[item.item_id].unit || ''}
+                onChange={(e) => setEditingItems(prev => ({
+                  ...prev,
+                  [item.item_id]: {
+                    ...prev[item.item_id],
+                    unit: e.target.value
+                  }
+                }))}
+                className="w-24 px-2 py-1 border border-slate-300 rounded text-sm"
+                placeholder="kg, m, pcs..."
+              />
+            ) : (
+              <span className="text-sm font-medium text-slate-700 bg-slate-100 px-2 py-1 rounded">
+                {item.unit}
+              </span>
+            )}
+          </div>
+
+          {/* Prix unitaire (for valuation) */}
+          {isEditMode && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-600">Prix unitaire (DH)</span>
+              {editingItems[item.item_id] ? (
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingItems[item.item_id].price ?? ''}
+                  onChange={(e) => setEditingItems(prev => ({
+                    ...prev,
+                    [item.item_id]: { ...prev[item.item_id], price: e.target.value }
+                  }))}
+                  className="w-24 px-2 py-1 border border-slate-300 rounded text-sm"
+                  placeholder="0"
+                />
+              ) : (
+                <span className="text-sm font-medium text-slate-700">
+                  {item.price ? `${Number(item.price).toLocaleString('fr-FR')} DH` : '—'}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Emplacement */}
+          {item.place && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-600">Emplacement</span>
+              <span className="text-sm font-medium text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
+                {item.place}
+              </span>
+            </div>
+          )}
+
+          {/* Notes */}
+          {item.notes && (
+            <div>
+              <span className="text-sm text-slate-600 block mb-1">Notes</span>
+              <p className="text-sm text-slate-700 bg-slate-50 p-2 rounded border">
+                {item.notes}
+              </p>
+            </div>
+          )}
+
+          {/* Delete Button in Edit Mode */}
+          {isEditMode && (
+            <button
+              onClick={() => deleteItem(item.item_id)}
+              className="w-full mt-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 text-sm"
+            >
+              <Trash2 className="h-4 w-4" />
+              Supprimer
+            </button>
+          )}
+
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -451,159 +653,31 @@ const Stock = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredItems.map((item) => {
-            const stockStatus = getStockStatus(item.quantity);
-            const StatusIcon = stockStatus.icon;
-            
-            return (
-              <div
-                key={item.item_id}
-                className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow duration-300 overflow-hidden"
-              >
-                {/* Card Header with Status */}
-                <div className={`p-4 border-b border-slate-100 bg-${stockStatus.color}-50`}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-800 text-lg leading-tight">
-                        {item.item_name}
-                      </h3>
-                      <div className="flex items-center space-x-2 mt-2">
-                        <StatusIcon className={`h-4 w-4 text-${stockStatus.color}-600`} />
-                        <span className={`text-sm font-medium text-${stockStatus.color}-600`}>
-                          {stockStatus.text}
-                        </span>
-                      </div>
-                    </div>
-                    <Package className="h-8 w-8 text-slate-400" />
-                  </div>
-                </div>
+        <div className="space-y-8">
+          {/* Items actually in stock */}
+          {inStockItems.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {inStockItems.map((item) => renderStockCard(item))}
+            </div>
+          )}
 
-                {/* Card Body */}
-                <div className="p-4 space-y-3">
-                  {/* Quantity */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Quantité</span>
-                    {isEditMode && editingItems[item.item_id] ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          value={editingItems[item.item_id].quantity || ''}
-                          onChange={(e) => setEditingItems(prev => ({
-                            ...prev,
-                            [item.item_id]: { 
-                              ...prev[item.item_id], 
-                              quantity: e.target.value 
-                            }
-                          }))}
-                          className="w-20 px-2 py-1 border border-slate-300 rounded text-sm"
-                        />
-                        <button
-                          onClick={() => updateItem(item.item_id, {
-                            quantity: editingItems[item.item_id].quantity,
-                            unit: editingItems[item.item_id].unit
-                          })}
-                          className="p-1 bg-green-600 text-white rounded hover:bg-green-700"
-                          title="Enregistrer"
-                        >
-                          <Save className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={() => setEditingItems(prev => {
-                            const newState = { ...prev };
-                            delete newState[item.item_id];
-                            return newState;
-                          })}
-                          className="p-1 bg-slate-400 text-white rounded hover:bg-slate-500"
-                          title="Annuler"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl font-bold text-slate-800">
-                          {item.quantity}
-                        </span>
-                        {isEditMode && (
-                          <button
-                            onClick={() => setEditingItems(prev => ({
-                              ...prev,
-                              [item.item_id]: { 
-                                quantity: item.quantity,
-                                unit: item.unit 
-                              }
-                            }))}
-                            className="p-1 text-blue-600 hover:text-blue-800"
-                            title="Modifier"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Unit */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Unité</span>
-                    {isEditMode && editingItems[item.item_id] ? (
-                      <input
-                        type="text"
-                        value={editingItems[item.item_id].unit || ''}
-                        onChange={(e) => setEditingItems(prev => ({
-                          ...prev,
-                          [item.item_id]: { 
-                            ...prev[item.item_id], 
-                            unit: e.target.value 
-                          }
-                        }))}
-                        className="w-24 px-2 py-1 border border-slate-300 rounded text-sm"
-                        placeholder="kg, m, pcs..."
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-700 bg-slate-100 px-2 py-1 rounded">
-                        {item.unit}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Emplacement */}
-                  {item.place && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Emplacement</span>
-                      <span className="text-sm font-medium text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
-                        {item.place}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Notes */}
-                  {item.notes && (
-                    <div>
-                      <span className="text-sm text-slate-600 block mb-1">Notes</span>
-                      <p className="text-sm text-slate-700 bg-slate-50 p-2 rounded border">
-                        {item.notes}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Delete Button in Edit Mode */}
-                  {isEditMode && (
-                    <button
-                      onClick={() => deleteItem(item.item_id)}
-                      className="w-full mt-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 text-sm"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Supprimer
-                    </button>
-                  )}
-
-                </div>
+          {/* Épuisé (à 0) — only appears in Admin Editing mode, grouped apart */}
+          {epuiseItems.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-700 text-sm font-semibold rounded">
+                  <AlertTriangle className="h-4 w-4" />
+                  Épuisé ({epuiseItems.length})
+                </span>
+                <span className="text-sm text-slate-500">
+                  articles à 0 — réapprovisionnez-les ou supprimez-les
+                </span>
               </div>
-            );
-          })}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {epuiseItems.map((item) => renderStockCard(item))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

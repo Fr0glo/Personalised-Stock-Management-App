@@ -1,7 +1,28 @@
 import express from 'express';
 import { runQuery, getRow, getAll } from '../database/connection.js';
+import { runTransaction, resolveUserId, writeAudit } from '../database/inventory.js';
 
 const router = express.Router();
+
+// Make sure the table for "not found" items exists, even if migrations were not
+// run yet. Items recorded here left the depot but are not in the stock.
+let unregisteredEnsured = false;
+const ensureUnregisteredTable = async () => {
+  if (unregisteredEnsured) return;
+  await runQuery(`
+    CREATE TABLE IF NOT EXISTS exitUnregisteredItems (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exit_id INTEGER NOT NULL,
+      item_name TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      worker_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (exit_id) REFERENCES exitVouchers (exit_id),
+      FOREIGN KEY (worker_id) REFERENCES workers (worker_id)
+    )
+  `);
+  unregisteredEnsured = true;
+};
 
 // Get all exit voucher details
 router.get('/', async (req, res) => {
@@ -32,9 +53,37 @@ router.get('/voucher/:voucherId', async (req, res) => {
 // Add item to exit voucher
 router.post('/', async (req, res) => {
   try {
-    const { voucher_id, item_id, quantity } = req.body;
+    const { voucher_id, item_id, quantity, is_unregistered, item_name } = req.body;
 
-    console.log('Received data for exit voucher detail:', { voucher_id, item_id, quantity });
+    console.log('Received data for exit voucher detail:', { voucher_id, item_id, quantity, is_unregistered });
+
+    // "Not found" item: it left the depot but is not in the stock. We only record
+    // it on the voucher for tracking — no stock check, no stock reduction.
+    if (is_unregistered) {
+      if (!voucher_id || !item_name || !item_name.toString().trim() || quantity === undefined || quantity <= 0) {
+        return res.status(400).json({
+          error: 'Missing required fields for unregistered item',
+          received: { voucher_id, item_name, quantity },
+          required: ['voucher_id', 'item_name', 'quantity > 0']
+        });
+      }
+
+      await ensureUnregisteredTable();
+
+      // Reuse the worker recorded on the voucher (who took the items).
+      const voucher = await getRow('SELECT taken_by FROM exitVouchers WHERE exit_id = ?', [voucher_id]);
+      const result = await runQuery(
+        'INSERT INTO exitUnregisteredItems (exit_id, item_name, quantity, worker_id) VALUES (?, ?, ?, ?)',
+        [voucher_id, item_name.toString().trim(), quantity, voucher?.taken_by || null]
+      );
+
+      console.log('Unregistered (not-found) item recorded with ID:', result.id);
+      return res.status(201).json({
+        detail_id: result.id,
+        unregistered: true,
+        message: 'Unregistered item recorded on voucher (stock unchanged)'
+      });
+    }
 
     if (!voucher_id || !item_id || quantity === undefined || quantity <= 0) {
       return res.status(400).json({ 
@@ -65,7 +114,7 @@ router.post('/', async (req, res) => {
     // Note: exitDetails table uses exit_id, which is the same as voucher_id
     const result = await runQuery(
       'INSERT INTO exitDetails (exit_id, item_id, worker_id, quantity) VALUES (?, ?, ?, ?)',
-      [voucher_id, item_id, voucher?.taken_by || 1, quantity]
+      [voucher_id, item_id, voucher?.taken_by || (await getRow('SELECT MIN(worker_id) AS id FROM workers'))?.id || null, quantity]
     );
     
     console.log('Exit detail inserted with ID:', result.id);
@@ -174,16 +223,33 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update exit voucher detail
+// Update exit voucher detail (adjusts stock by the difference, audited)
 router.put('/:detailId', async (req, res) => {
   try {
     const { detailId } = req.params;
-    const { quantity, unit } = req.body;
+    const { quantity, edited_by } = req.body;
+    const newQty = Number(quantity);
+    if (!Number.isFinite(newQty) || newQty <= 0) {
+      return res.status(400).json({ error: 'Valid quantity is required' });
+    }
 
-    await runQuery(
-      'UPDATE exitDetails SET quantity = ?, unit = ? WHERE detail_id = ?',
-      [quantity, unit, detailId]
-    );
+    const detail = await getRow('SELECT exit_detail_id, item_id, quantity FROM exitDetails WHERE exit_detail_id = ?', [detailId]);
+    if (!detail) return res.status(404).json({ error: 'Exit voucher detail not found' });
+
+    const actorUserId = await resolveUserId(edited_by);
+    await runTransaction(async () => {
+      // The exit removed detail.quantity; it should now remove newQty.
+      // Stock therefore changes by (old - new).
+      if (detail.item_id) {
+        const cur = await getRow('SELECT quantity FROM stockItems WHERE item_id = ?', [detail.item_id]);
+        if (cur) {
+          const after = Math.max(0, cur.quantity + (detail.quantity - newQty));
+          await runQuery('UPDATE stockItems SET quantity = ? WHERE item_id = ?', [after, detail.item_id]);
+          await writeAudit('adjustment', detail.item_id, actorUserId, cur.quantity, after);
+        }
+      }
+      await runQuery('UPDATE exitDetails SET quantity = ? WHERE exit_detail_id = ?', [newQty, detailId]);
+    });
 
     res.json({ message: 'Exit voucher detail updated successfully' });
   } catch (error) {
@@ -192,12 +258,26 @@ router.put('/:detailId', async (req, res) => {
   }
 });
 
-// Delete exit voucher detail
+// Delete exit voucher detail (returns its quantity to stock, audited)
 router.delete('/:detailId', async (req, res) => {
   try {
     const { detailId } = req.params;
 
-    await runQuery('DELETE FROM exitDetails WHERE detail_id = ?', [detailId]);
+    const detail = await getRow('SELECT exit_detail_id, item_id, quantity FROM exitDetails WHERE exit_detail_id = ?', [detailId]);
+    if (!detail) return res.status(404).json({ error: 'Exit voucher detail not found' });
+
+    const actorUserId = await resolveUserId(req.body?.deleted_by);
+    await runTransaction(async () => {
+      if (detail.item_id) {
+        const cur = await getRow('SELECT quantity FROM stockItems WHERE item_id = ?', [detail.item_id]);
+        if (cur) {
+          const after = cur.quantity + detail.quantity; // return to stock
+          await runQuery('UPDATE stockItems SET quantity = ? WHERE item_id = ?', [after, detail.item_id]);
+          await writeAudit('exit_reversal', detail.item_id, actorUserId, cur.quantity, after);
+        }
+      }
+      await runQuery('DELETE FROM exitDetails WHERE exit_detail_id = ?', [detailId]);
+    });
 
     res.json({ message: 'Exit voucher detail deleted successfully' });
   } catch (error) {

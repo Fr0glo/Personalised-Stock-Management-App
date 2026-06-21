@@ -9,6 +9,9 @@ const Vouchers = () => {
   const [activeTab, setActiveTab] = useState('entry');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPersonnel, setSelectedPersonnel] = useState('all');
+  const [workers, setWorkers] = useState([]);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [voucherDetails, setVoucherDetails] = useState({});
@@ -67,6 +70,23 @@ const Vouchers = () => {
     fetchVouchers();
   }, []);
 
+  // Fetch the current list of workers from the database so the filter only
+  // offers people who still exist (removed workers no longer clutter the list).
+  useEffect(() => {
+    const fetchWorkers = async () => {
+      try {
+        const res = await fetch('/api/workers');
+        if (res.ok) {
+          setWorkers(await res.json());
+        }
+      } catch (err) {
+        console.error('Error fetching workers:', err);
+      }
+    };
+
+    fetchWorkers();
+  }, []);
+
   const fetchVoucherDetails = async (voucherId, type) => {
     const list = type === 'entry' ? entryVouchers : exitVouchers;
     const localVoucher = list.find(v => v[`${type}_id`] === voucherId);
@@ -113,10 +133,10 @@ const Vouchers = () => {
   };
 
   const verifyPin = () => {
-    if (pinCode.join('') === '3738') {
+    if (pinCode.join('') === '3739') {
       setIsAdminMode(true);
       setShowPinModal(false);
-      setPinCode(['', '', '', '']);
+      setPinCode(['', '', '', '']); 
       setPinError(false);
     } else {
       setPinError(true);
@@ -185,73 +205,74 @@ const Vouchers = () => {
     });
   };
 
-  // Memoize unique worker names for filter (actual workers who received items)
+  // Worker names for the filter dropdown, built from the CURRENT workers in the
+  // database — so people who were removed no longer appear here. Their old
+  // vouchers stay visible in the list and remain findable via the search box.
   const allWorkers = useMemo(() => {
     return [
       ...new Set(
-        Object.values(voucherDetails)
-          .flatMap(detail => detail.details || [])
-          .map(detail => {
-            if (detail.worker_name) {
-              return detail.worker_name.trim();
-            }
-            const fallback = `${detail.F_Name || ''} ${detail.Surname || ''}`.trim();
-            return fallback || null;
-          })
+        workers
+          .map(worker => `${worker.F_Name || ''} ${worker.Surname || ''}`.trim())
           .filter(Boolean)
       )
     ].sort();
-  }, [voucherDetails]);
+  }, [workers]);
+
+  // Extract a comparable YYYY-MM-DD day from any stored date format
+  // (ISO, "YYYY-MM-DD HH:MM", or plain "YYYY-MM-DD").
+  const getVoucherDay = (dateString) => {
+    if (!dateString) return null;
+    const direct = String(dateString).match(/^(\d{4}-\d{2}-\d{2})/);
+    if (direct) return direct[1];
+    const d = new Date(dateString);
+    if (Number.isNaN(d.getTime())) return null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
 
   // Memoize filtered vouchers to avoid recalculating on every render
   const filteredVouchers = useMemo(() => {
-    if (activeTab === 'entry') {
-      const lowerSearch = searchTerm.toLowerCase();
-      return entryVouchers.filter(voucher => {
-        const matchesSearch = [
-          voucher.voucher_number,
-          voucher.added_by_name,
-          voucher.taken_by_name,
-          voucher.notes
-        ].some(field => field?.toString().toLowerCase().includes(lowerSearch)) ||
-        voucher.entry_id?.toString().includes(searchTerm);
-        
-        // Check if voucher has the selected worker
-        const voucherKey = `entry_${voucher.entry_id}`;
-        const details = voucherDetails[voucherKey];
-        const hasWorker = selectedPersonnel === 'all' || 
-          (details?.details && details.details.some(detail => {
-            const name =
-              (detail.worker_name?.trim() ||
-               `${detail.F_Name || ''} ${detail.Surname || ''}`.trim());
-            return name && name === selectedPersonnel;
-          }));
-        
-        return matchesSearch && hasWorker;
-      });
-    } else {
-      const lowerSearch = searchTerm.toLowerCase();
-      return exitVouchers.filter(voucher => {
-        const matchesSearch = [
-          voucher.voucher_number,
-          voucher.handled_by_name,
-          voucher.taken_by_name,
-          voucher.notes
-        ].some(field => field?.toString().toLowerCase().includes(lowerSearch)) ||
-        voucher.exit_id?.toString().includes(searchTerm);
-        
-        // Check if voucher has the selected worker
-        const voucherKey = `exit_${voucher.exit_id}`;
-        const details = voucherDetails[voucherKey];
-        const hasWorker = selectedPersonnel === 'all' || 
-          (details?.details && details.details.some(detail => 
-            (detail.worker_name?.trim() || `${detail.F_Name || ''} ${detail.Surname || ''}`.trim()) === selectedPersonnel
-          ));
-        
-        return matchesSearch && hasWorker;
-      });
-    }
-  }, [activeTab, entryVouchers, exitVouchers, searchTerm, selectedPersonnel, voucherDetails]);
+    const isEntry = activeTab === 'entry';
+    const source = isEntry ? entryVouchers : exitVouchers;
+    const idKey = isEntry ? 'entry_id' : 'exit_id';
+    const handledKey = isEntry ? 'added_by_name' : 'handled_by_name';
+    const lowerSearch = searchTerm.toLowerCase();
+
+    return source.filter(voucher => {
+      const voucherKey = `${activeTab}_${voucher[idKey]}`;
+      const details = voucherDetails[voucherKey]?.details || [];
+
+      // Names of the workers on this voucher (kept even if the worker was later
+      // removed), so old vouchers stay findable by typing the person's name.
+      const detailWorkerNames = details
+        .map(detail =>
+          (detail.worker_name?.trim() ||
+           `${detail.F_Name || ''} ${detail.Surname || ''}`.trim()))
+        .filter(Boolean);
+
+      const matchesSearch = [
+        voucher.voucher_number,
+        voucher[handledKey],
+        voucher.taken_by_name,
+        voucher.notes,
+        ...detailWorkerNames
+      ].some(field => field?.toString().toLowerCase().includes(lowerSearch)) ||
+        voucher[idKey]?.toString().includes(searchTerm);
+
+      // Worker filter: a specific person selected from the dropdown.
+      const hasWorker = selectedPersonnel === 'all' ||
+        detailWorkerNames.some(name => name.toLowerCase() === selectedPersonnel.toLowerCase());
+
+      // Date range filter (inclusive). Compares the YYYY-MM-DD day only.
+      const day = getVoucherDay(voucher.date);
+      const matchesDate =
+        (!dateFrom && !dateTo) ||
+        (day !== null &&
+          (!dateFrom || day >= dateFrom) &&
+          (!dateTo || day <= dateTo));
+
+      return matchesSearch && hasWorker && matchesDate;
+    });
+  }, [activeTab, entryVouchers, exitVouchers, searchTerm, selectedPersonnel, voucherDetails, dateFrom, dateTo]);
 
   const modalTakenByName = (() => {
     if (!selectedVoucher) return null;
@@ -365,6 +386,42 @@ const Vouchers = () => {
             </div>
           </div>
 
+          {/* Date Range Filter */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Calendar className="absolute left-3 top-2.5 h-5 w-5 text-slate-400 pointer-events-none" />
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => setDateFrom(e.target.value)}
+                title="Du"
+                className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+              />
+            </div>
+            <span className="text-slate-400 text-sm">→</span>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-2.5 h-5 w-5 text-slate-400 pointer-events-none" />
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
+                title="Au"
+                className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white"
+              />
+            </div>
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                title="Effacer les dates"
+                className="p-2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
           {/* Personnel Filter */}
           <div className="sm:w-64">
             <div className="relative">
@@ -420,8 +477,8 @@ const Vouchers = () => {
           <FileText className="h-16 w-16 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-slate-600 mb-2">Aucun bon trouvé</h3>
           <p className="text-slate-500">
-            {searchTerm 
-              ? 'Essayez de modifier vos critères de recherche' 
+            {(searchTerm || selectedPersonnel !== 'all' || dateFrom || dateTo)
+              ? 'Essayez de modifier vos critères de recherche'
               : `Aucun bon ${activeTab === 'entry' ? 'd\'entrée' : 'de sortie'} créé pour le moment`
             }
           </p>
@@ -529,10 +586,15 @@ const Vouchers = () => {
                           <h4 className="text-xs font-semibold text-slate-500 mb-2">Articles</h4>
                           <div className="space-y-2">
                             {topDetails.map(detail => (
-                              <div key={`${voucherId}-${detail.item_id}`} className="flex items-start justify-between text-sm">
+                              <div key={`${voucherId}-${detail.exit_detail_id ?? detail.item_id}`} className="flex items-start justify-between text-sm">
                                 <div>
                                   <p className="font-medium text-slate-800">{detail.item_name}</p>
-                                  {/* Per-article personnel is shown in the popup details */}
+                                  {detail.is_unregistered && (
+                                    <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-[11px] font-medium rounded">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      Hors stock
+                                    </span>
+                                  )}
                                 </div>
                                 <span className="font-semibold text-slate-700">{detail.quantity}</span>
                               </div>
@@ -701,11 +763,20 @@ const Vouchers = () => {
                   <h3 className="text-sm font-medium text-slate-600 mb-4">Articles</h3>
                   <div className="space-y-3">
                     {selectedVoucher.details.map((detail, index) => (
-                      <div key={index} className="bg-slate-50 p-4 rounded-lg border">
+                      <div
+                        key={index}
+                        className={`p-4 rounded-lg border ${detail.is_unregistered ? 'bg-yellow-50 border-yellow-300' : 'bg-slate-50'}`}
+                      >
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                           <div>
                             <span className="text-slate-600">Article:</span>
                             <p className="font-medium">{detail.item_name}</p>
+                            {detail.is_unregistered && (
+                              <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-[11px] font-medium rounded">
+                                <AlertTriangle className="h-3 w-3" />
+                                Article non trouvé · sorti hors stock
+                              </span>
+                            )}
                           </div>
                           <div>
                             <span className="text-slate-600">Quantité:</span>

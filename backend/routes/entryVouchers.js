@@ -1,5 +1,6 @@
 import express from 'express';
 import { getAll, getRow, runQuery } from '../database/connection.js';
+import { runTransaction, resolveUserId, applyEntryItem, reverseEntryVoucher } from '../database/inventory.js';
 
 const router = express.Router();
 
@@ -195,11 +196,40 @@ router.post('/', async (req, res) => {
       }
     }
     
-    console.log('Converted user and worker names to IDs:', {
-      handled_by_user_id: handledByUser.user_id,
-      taken_by_worker_id: takenByWorkerId
-    });
-    
+    // Preferred path: create the voucher and add every item to stock in ONE
+    // transaction. Stock increases exactly once per item here (the old flow
+    // added it twice — once via /stock-items and again via the detail route).
+    const items = Array.isArray(req.body.items) ? req.body.items : null;
+    if (items) {
+      try {
+        const voucherId = await runTransaction(async () => {
+          const vr = await runQuery(
+            'INSERT INTO entryVouchers (voucher_number, date, added_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
+            [voucher_number || null, date || new Date().toISOString(), handledByUser.user_id, takenByWorkerId, place || null, notes || null]
+          );
+          const vid = vr.id;
+          for (const it of items) {
+            const itemPlace = (it.place || '').trim() || (place || '').trim() || null;
+            await applyEntryItem({
+              voucherId: vid,
+              item_name: it.item_name,
+              quantity: Number(it.quantity),
+              unit: it.unit,
+              notes: it.notes,
+              place: itemPlace,
+              workerId: takenByWorkerId,
+              actorUserId: handledByUser.user_id
+            });
+          }
+          return vid;
+        });
+        return res.status(201).json({ voucher_id: voucherId, message: 'Entry voucher created successfully' });
+      } catch (txError) {
+        console.error('Transactional entry voucher creation failed:', txError.message);
+        return res.status(400).json({ error: 'Failed to create entry voucher', details: txError.message });
+      }
+    }
+
     // Create the entry voucher record in the database
     const voucherResult = await runQuery(
       'INSERT INTO entryVouchers (voucher_number, date, added_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
@@ -212,12 +242,12 @@ router.post('/', async (req, res) => {
         notes || null
       ]
     );
-    
+
     console.log('Entry voucher created with ID:', voucherResult.id);
-    
-    res.status(201).json({ 
-      voucher_id: voucherResult.id, 
-      message: 'Entry voucher created successfully' 
+
+    res.status(201).json({
+      voucher_id: voucherResult.id,
+      message: 'Entry voucher created successfully'
     });
   } catch (error) {
     console.error('Error creating entry voucher:', error);
@@ -231,8 +261,14 @@ router.delete('/:id', async (req, res) => {
     const voucher = await getRow('SELECT * FROM entryVouchers WHERE entry_id = ?', [req.params.id]);
     if (!voucher) return res.status(404).json({ error: 'Bon introuvable' });
 
-    await runQuery('DELETE FROM entryDetails WHERE entry_id = ?', [req.params.id]);
-    await runQuery('DELETE FROM entryVouchers WHERE entry_id = ?', [req.params.id]);
+    // Deleting an entry voucher undoes the stock it added (taken back out),
+    // then removes the voucher — all atomically.
+    const actorUserId = (await resolveUserId(req.body?.deleted_by)) ?? voucher.added_by;
+    await runTransaction(async () => {
+      await reverseEntryVoucher(req.params.id, actorUserId);
+      await runQuery('DELETE FROM entryDetails WHERE entry_id = ?', [req.params.id]);
+      await runQuery('DELETE FROM entryVouchers WHERE entry_id = ?', [req.params.id]);
+    });
     res.json({ message: 'Bon supprimé' });
   } catch (error) {
     console.error('Error deleting entry voucher:', error);

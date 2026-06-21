@@ -1,7 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Minus, Package, User, Calendar, Save, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Search, Minus, Plus, Package, User, Calendar, Save, ArrowLeft, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
+
+// Format a typed number into the printed voucher format, e.g. 1 -> "S-0001"
+const formatVoucherNumber = (prefix, value) => {
+  const n = parseInt(value, 10);
+  if (Number.isNaN(n) || n <= 0) return '';
+  return `${prefix}-${String(n).padStart(4, '0')}`;
+};
+
+// Today's date as YYYY-MM-DD in local time (for the date input default)
+const getTodayDate = () => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 const BonSortie = () => {
   const navigate = useNavigate();
@@ -10,11 +26,14 @@ const BonSortie = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [catalogSuggestions, setCatalogSuggestions] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [voucherData, setVoucherData] = useState({
     voucherNumber: '',
+    date: getTodayDate(),
+    time: '',
     handledBy: '',
     takenBy: '',
     notes: ''
@@ -89,11 +108,13 @@ const BonSortie = () => {
     }
   }, [adminUsers]); // Run after adminUsers are loaded
 
-  // Fetch a default list of available stock items when focusing the search field
+  // Fetch a default list of available stock items when focusing the search field.
+  // Only items actually in stock (quantity > 0) — an item at 0 can't be taken out,
+  // so it's offered through the catalogue suggestions / "non trouvé" flow instead.
   const fetchAllStockItems = async () => {
     setIsSearching(true);
     try {
-      const response = await axios.get('/api/stock-items?limit=50&includeZero=true');
+      const response = await axios.get('/api/stock-items?limit=50');
       setSearchResults(response.data);
       setShowSearchResults(true);
     } catch (error) {
@@ -118,13 +139,29 @@ const BonSortie = () => {
 
     setIsSearching(true);
     try {
-      // Use server-side search with limit for performance - include items with zero quantity
-      const response = await axios.get(`/api/stock-items?search=${encodeURIComponent(trimmedTerm)}&limit=50&includeZero=true`);
-      setSearchResults(response.data); // Shows all stock items including zero quantity
+      // Only items actually in stock (quantity > 0). Items at 0 fall through to
+      // the catalogue suggestions / "article non trouvé" flow below.
+      const response = await axios.get(`/api/stock-items?search=${encodeURIComponent(trimmedTerm)}&limit=50`);
+      setSearchResults(response.data);
       setShowSearchResults(true);
+
+      // If nothing is in stock, offer canonical names from the catalogue so a
+      // "not found" item is recorded under a known name (avoids variants like
+      // "tube T" vs "tube en T"). Otherwise clear any stale suggestions.
+      if (response.data.length === 0) {
+        try {
+          const cat = await axios.get(`/api/product-catalog?search=${encodeURIComponent(trimmedTerm)}&limit=8`);
+          setCatalogSuggestions(cat.data || []);
+        } catch {
+          setCatalogSuggestions([]);
+        }
+      } else {
+        setCatalogSuggestions([]);
+      }
     } catch (error) {
       console.error('Error searching products:', error);
       setSearchResults([]);
+      setCatalogSuggestions([]);
       setShowSearchResults(false);
     } finally {
       setIsSearching(false);
@@ -178,6 +215,34 @@ const BonSortie = () => {
     // Clear search
     setSearchTerm('');
     setShowSearchResults(false);
+    setCatalogSuggestions([]);
+  };
+
+  // Add an item that was NOT found in the stock. It leaves the depot and is
+  // recorded on the voucher as "article non trouvé", but never touches stock.
+  // `unit` is passed when the name was chosen from the catalogue.
+  const addUnregisteredItem = (name, unit = 'pcs') => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    // Avoid duplicate not-found entries with the same name
+    const alreadyAdded = selectedItems.some(
+      item => item.is_unregistered && item.item_name.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    if (!alreadyAdded) {
+      setSelectedItems(prev => [...prev, {
+        item_id: `unreg_${Date.now()}`, // string id: unique and never matches a real stock item
+        item_name: trimmed,
+        quantity: 1,
+        unit: unit || 'pcs',
+        is_unregistered: true
+      }]);
+    }
+
+    setSearchTerm('');
+    setShowSearchResults(false);
+    setCatalogSuggestions([]);
   };
 
   // Update item quantity
@@ -200,19 +265,6 @@ const BonSortie = () => {
     setSelectedItems(prev => prev.filter(item => item.item_id !== itemId));
   };
 
-  // Get next voucher number
-  const getNextVoucherNumber = async () => {
-    try {
-      const response = await axios.get('/api/exit-vouchers');
-      const vouchers = response.data;
-      const nextNumber = vouchers.length + 1;
-      return nextNumber.toString();
-    } catch (error) {
-      console.error('Error getting voucher number:', error);
-      return '1';
-    }
-  };
-
   // Submit voucher
   const submitVoucher = async () => {
     if (selectedItems.length === 0) {
@@ -230,84 +282,56 @@ const BonSortie = () => {
       return;
     }
 
+    // The voucher number must match the physical voucher book (S-0001, S-0025, ...)
+    const formattedVoucherNumber = formatVoucherNumber('S', voucherData.voucherNumber);
+    if (!formattedVoucherNumber) {
+      alert('Veuillez indiquer le numéro du bon (ex: 1)');
+      return;
+    }
+
+    if (!voucherData.time) {
+      alert("Veuillez indiquer l'heure du bon");
+      return;
+    }
+
 
     try {
-      // Get next voucher number (always auto-generated)
-      const voucherNumber = await getNextVoucherNumber();
+      // Combine the (editable) date with the manually entered time.
+      // Stored as a local datetime so the time shows exactly as typed.
+      const voucherDate = voucherData.date || getTodayDate();
+      const fullDateTime = `${voucherDate}T${voucherData.time}`;
 
-      // Use current date and time automatically
-      const fullDateTime = new Date().toISOString();
+      // Build the items list: real stock items vs. "not found" items.
+      const items = selectedItems.map(item => (
+        item.is_unregistered
+          ? { is_unregistered: true, item_name: item.item_name, quantity: item.quantity }
+          : { item_id: item.item_id, quantity: item.quantity }
+      ));
 
-      // Create exit voucher
-      console.log('🔍 Creating exit voucher with data:', {
-        voucher_number: voucherNumber,
-        date: fullDateTime,
-        handled_by: voucherData.handledBy,
-        taken_by: voucherData.takenBy,
-        notes: voucherData.notes
-      });
-      
-      const voucherResponse = await axios.post('/api/exit-vouchers', {
-        voucher_number: voucherNumber,
+      // Create the voucher and all its items in ONE atomic request. If any item
+      // fails (e.g. insufficient stock), nothing is saved — no partial voucher.
+      await axios.post('/api/exit-vouchers', {
+        voucher_number: formattedVoucherNumber,
         date: fullDateTime,
         handled_by: voucherData.handledBy,
         taken_by: voucherData.takenBy,
         place: null,
-        notes: voucherData.notes
+        notes: voucherData.notes,
+        items
       });
-
-      console.log('✅ Exit voucher created:', voucherResponse.data);
-      const voucherId = voucherResponse.data.voucher_id || voucherResponse.data.exit_id;
-      
-      if (!voucherId) {
-        console.error('❌ Voucher response:', voucherResponse.data);
-        throw new Error('Voucher ID is missing from response');
-      }
-      
-      console.log('🔍 Using voucher ID:', voucherId);
-
-      // Add each item to the voucher (backend will handle stock reduction)
-      for (const item of selectedItems) {
-        try {
-          console.log('🔍 Adding item to exit voucher:', {
-            voucher_id: voucherId,
-            item_id: item.item_id,
-            quantity: item.quantity,
-            item_name: item.item_name
-          });
-          
-          // Validate data before sending
-          if (!item.item_id) {
-            throw new Error('Item ID is missing');
-          }
-          if (!item.quantity || item.quantity <= 0) {
-            throw new Error('Invalid quantity');
-          }
-          
-          // Add to voucher details (this will also reduce stock in the backend)
-          const detailResponse = await axios.post('/api/exit-vouchers/details', {
-            voucher_id: voucherId,
-            item_id: item.item_id,
-            quantity: item.quantity
-          });
-          
-          console.log('✅ Item added to exit voucher:', detailResponse.data);
-        } catch (error) {
-          console.error('❌ Error adding item to exit voucher:', error.response?.data || error.message);
-          throw error; // Re-throw to trigger the catch block
-        }
-      }
 
       alert('Bon de sortie créé avec succès!');
       
-      // Reset form
+      // Reset form (keep the logged-in handler pre-filled)
       setSelectedItems([]);
-      setVoucherData({
+      setVoucherData(prev => ({
         voucherNumber: '',
-        handledBy: '',
+        date: getTodayDate(),
+        time: '',
+        handledBy: prev.handledBy,
         takenBy: '',
         notes: ''
-      });
+      }));
       
     } catch (error) {
       console.error('Error creating voucher:', error);
@@ -536,12 +560,54 @@ const BonSortie = () => {
                 </div>
               )}
 
+              {/* Catalogue suggestions: known item names (not currently in stock).
+                  Picking one keeps naming consistent and avoids variants. */}
+              {searchTerm && searchResults.length === 0 && catalogSuggestions.length > 0 && !isSearching && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold text-slate-500 mb-2">
+                    Noms existants dans le catalogue — choisissez-en un si c'est le bon article :
+                  </p>
+                  <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
+                    {catalogSuggestions.map((product) => (
+                      <div
+                        key={product.catalog_id}
+                        onClick={() => addUnregisteredItem(product.item_name, product.default_unit)}
+                        className="p-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-100 last:border-b-0 flex justify-between items-center"
+                      >
+                        <div>
+                          <p className="font-medium text-slate-800">{product.item_name}</p>
+                          <p className="text-xs text-slate-500">
+                            Pas en stock actuellement{product.default_unit ? ` • ${product.default_unit}` : ''}
+                          </p>
+                        </div>
+                        <Plus className="w-4 h-4 text-emerald-600" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {searchTerm && searchResults.length === 0 && !isSearching && (
                 <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <div className="flex items-center gap-2 text-yellow-800">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span className="text-sm">Aucun article disponible trouvé pour "{searchTerm}"</span>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 text-yellow-800">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <span className="text-sm">Aucun article disponible trouvé pour "{searchTerm}"</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addUnregisteredItem(searchTerm)}
+                      className="px-3 py-1.5 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Ajouter comme article non trouvé
+                    </button>
                   </div>
+                  <p className="text-xs text-yellow-700 mt-2">
+                    {catalogSuggestions.length > 0
+                      ? "Si aucun nom ci-dessus ne correspond, ajoutez-le comme nouvel article non trouvé."
+                      : "L'article sera enregistré sur le bon comme sorti du dépôt, sans être ajouté au stock."}
+                  </p>
                 </div>
               )}
             </div>
@@ -562,13 +628,23 @@ const BonSortie = () => {
               ) : (
                 <div className="space-y-3">
                   {selectedItems.map((item) => (
-                    <div key={item.item_id} className="p-4 border border-slate-200 rounded-lg">
+                    <div
+                      key={item.item_id}
+                      className={`p-4 border rounded-lg ${item.is_unregistered ? 'border-yellow-300 bg-yellow-50' : 'border-slate-200'}`}
+                    >
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <h3 className="font-medium text-slate-800">{item.item_name}</h3>
-                          <p className="text-sm text-slate-500">
-                            Stock disponible: {item.max_quantity} {item.unit}
-                          </p>
+                          {item.is_unregistered ? (
+                            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
+                              <AlertTriangle className="w-3 h-3" />
+                              Article non trouvé · hors stock
+                            </span>
+                          ) : (
+                            <p className="text-sm text-slate-500">
+                              Stock disponible: {item.max_quantity} {item.unit}
+                            </p>
+                          )}
                         </div>
                         <button
                           onClick={() => removeItem(item.item_id)}
@@ -597,7 +673,7 @@ const BonSortie = () => {
                               onChange={(e) => updateQuantity(item.item_id, parseInt(e.target.value))}
                               className="w-20 px-2 py-1 border border-slate-300 rounded text-center"
                               min="0"
-                              max={item.max_quantity}
+                              max={item.is_unregistered ? undefined : item.max_quantity}
                             />
                             <button
                               onClick={() => updateQuantity(item.item_id, item.quantity + 1)}
@@ -606,22 +682,24 @@ const BonSortie = () => {
                               <Minus className="w-4 h-4 rotate-180" />
                             </button>
                           </div>
-                          {item.quantity > item.max_quantity && (
+                          {!item.is_unregistered && item.quantity > item.max_quantity && (
                             <p className="text-xs text-red-600 mt-1">
                               Quantité supérieure au stock disponible
                             </p>
                           )}
                         </div>
 
-                        {/* Stock After */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Stock Restant
-                          </label>
-                          <div className="px-3 py-2 bg-slate-100 rounded-lg text-slate-600">
-                            {item.max_quantity - item.quantity} {item.unit}
+                        {/* Stock After (registered items only) */}
+                        {!item.is_unregistered && (
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Stock Restant
+                            </label>
+                            <div className="px-3 py-2 bg-slate-100 rounded-lg text-slate-600">
+                              {item.max_quantity - item.quantity} {item.unit}
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -639,6 +717,57 @@ const BonSortie = () => {
               </h2>
 
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Numéro du bon <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center">
+                    <span className="px-3 py-2 bg-slate-100 border border-r-0 border-slate-300 rounded-l-lg font-semibold text-slate-700">
+                      S-
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={voucherData.voucherNumber}
+                      onChange={(e) => setVoucherData(prev => ({ ...prev, voucherNumber: e.target.value }))}
+                      placeholder="Ex: 1"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-r-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                    />
+                  </div>
+                  {formatVoucherNumber('S', voucherData.voucherNumber) && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Enregistré comme{' '}
+                      <span className="font-semibold text-emerald-600">
+                        {formatVoucherNumber('S', voucherData.voucherNumber)}
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={voucherData.date}
+                    onChange={(e) => setVoucherData(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Heure <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={voucherData.time}
+                    onChange={(e) => setVoucherData(prev => ({ ...prev, time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Géré par <span className="text-red-500">*</span>

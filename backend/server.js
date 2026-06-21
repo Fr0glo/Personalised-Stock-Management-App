@@ -18,6 +18,7 @@ import entryVoucherDetailsRoutes from './routes/entryVoucherDetails.js';
 import exitVoucherDetailsRoutes from './routes/exitVoucherDetails.js';
 import auditLogRoutes from './routes/auditLogs.js';
 import orderRoutes from './routes/orders.js';
+import analyticsRoutes from './routes/analytics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,11 +26,12 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Rate limiting helps prevent server overload from too many requests
-// Each IP address can make up to 200 requests every 15 minutes
+// Rate limiting helps prevent server overload from a runaway client.
+// Generous limit for an internal LAN app: each page load and admin edit
+// fires several API calls, so the previous 200/15min tripped during normal use.
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Maximum requests per IP in the time window
+  max: 5000, // Maximum requests per IP in the time window
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
@@ -53,6 +55,7 @@ app.use('/api/entry-vouchers', entryVoucherRoutes);
 app.use('/api/exit-vouchers', exitVoucherRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -7,16 +7,19 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { status } = req.query;
-    
-    // Build query - if status is specified and not 'all', filter by it, otherwise return all orders
+
+    // Build query - if status is specified and not 'all', filter by it, otherwise return all orders.
+    // Use a bound parameter (never string interpolation) to avoid SQL injection.
     let whereClause = '';
+    const params = [];
     if (status && status !== 'all') {
-      whereClause = `WHERE o.status = '${status}'`;
+      whereClause = 'WHERE o.status = ?';
+      params.push(status);
     }
-    
+
     // First get all orders (or filtered by status)
     const orders = await getAll(`
-      SELECT 
+      SELECT
         o.order_id,
         o.date,
         o.status,
@@ -26,7 +29,7 @@ router.get('/', async (req, res) => {
       LEFT JOIN users u ON o.created_by = u.user_id
       ${whereClause}
       ORDER BY o.date DESC
-    `);
+    `, params);
 
     // Then get items for each order
     const ordersWithItems = await Promise.all(orders.map(async (order) => {
@@ -82,8 +85,8 @@ router.post('/', async (req, res) => {
 
     // Get place from stock items for each order item
     for (const item of items) {
-      // Get place from stock item if it exists
-      const stockItem = await getRow('SELECT place FROM stockItems WHERE item_name = ? LIMIT 1', [item.item_name]);
+      // Get place from stock item if it exists (case-insensitive, ignore spaces)
+      const stockItem = await getRow('SELECT place FROM stockItems WHERE LOWER(TRIM(item_name)) = LOWER(TRIM(?)) LIMIT 1', [item.item_name]);
       const place = stockItem ? stockItem.place : null;
       
       await runQuery(

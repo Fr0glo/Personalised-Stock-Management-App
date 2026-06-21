@@ -17,8 +17,8 @@ const Dashboard = () => {
         
         // Fetch stock items and workers in parallel
         const [stockResponse, workersResponse] = await Promise.all([
-          fetch('http://localhost:4000/api/stock-items'),
-          fetch('http://localhost:4000/api/workers')
+          fetch('/api/stock-items'),
+          fetch('/api/workers')
         ]);
         
         if (!stockResponse.ok || !workersResponse.ok) {

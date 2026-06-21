@@ -8,7 +8,8 @@ import {
   LayoutDashboard,
   User,
   LogOut,
-  Clock
+  Clock,
+  BarChart3
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -58,6 +59,10 @@ const Sidebar = () => {
     { path: '/pending-orders', label: 'Commandes en Attente', icon: Clock },
     { path: '/vouchers', label: 'Les bons', icon: FileText },
     { path: '/personnel', label: 'Personnel', icon: Users },
+    // Admin-only analytics dashboard
+    ...(currentUser?.role === 'superadmin'
+      ? [{ path: '/analyse', label: 'Analyse', icon: BarChart3 }]
+      : []),
   ];
 
   return (

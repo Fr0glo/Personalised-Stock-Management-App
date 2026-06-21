@@ -3,6 +3,22 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Minus, Package, User, Calendar, Save, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
 
+// Format a typed number into the printed voucher format, e.g. 1 -> "E-0001"
+const formatVoucherNumber = (prefix, value) => {
+  const n = parseInt(value, 10);
+  if (Number.isNaN(n) || n <= 0) return '';
+  return `${prefix}-${String(n).padStart(4, '0')}`;
+};
+
+// Today's date as YYYY-MM-DD in local time (for the date input default)
+const getTodayDate = () => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const BonEntree = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -15,6 +31,8 @@ const BonEntree = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [voucherData, setVoucherData] = useState({
     voucherNumber: '',
+    date: getTodayDate(),
+    time: '',
     handledBy: '',
     takenBy: '',
     place: '',
@@ -176,19 +194,6 @@ const BonEntree = () => {
     setShowSearchResults(false);
   };
 
-  // Get next voucher number
-  const getNextVoucherNumber = async () => {
-    try {
-      const response = await axios.get('/api/entry-vouchers');
-      const vouchers = response.data;
-      const nextNumber = vouchers.length + 1;
-      return nextNumber.toString();
-    } catch (error) {
-      console.error('Error getting voucher number:', error);
-      return '1';
-    }
-  };
-
   // Submit voucher
   const submitVoucher = async () => {
     if (selectedItems.length === 0) {
@@ -206,77 +211,72 @@ const BonEntree = () => {
       return;
     }
 
+    // The voucher number must match the physical voucher book (E-0001, E-0025, ...)
+    const formattedVoucherNumber = formatVoucherNumber('E', voucherData.voucherNumber);
+    if (!formattedVoucherNumber) {
+      alert('Veuillez indiquer le numéro du bon (ex: 1)');
+      return;
+    }
+
+    if (!voucherData.time) {
+      alert("Veuillez indiquer l'heure du bon");
+      return;
+    }
+
 
     try {
-      // Get next voucher number (always auto-generated)
-      const voucherNumber = await getNextVoucherNumber();
+      // Combine the (editable) date with the manually entered time.
+      // Stored as a local datetime so the time shows exactly as typed.
+      const voucherDate = voucherData.date || getTodayDate();
+      const fullDateTime = `${voucherDate}T${voucherData.time}`;
 
-      // Use current date and time automatically
-      const fullDateTime = new Date().toISOString();
+      // Best-effort: remember each item's name/unit in the catalogue so the name
+      // suggestions stay complete. Non-critical and never touches stock.
+      for (const item of selectedItems) {
+        try {
+          await axios.post('/api/product-catalog', {
+            item_name: item.item_name,
+            default_unit: item.unit,
+            notes: item.notes || ''
+          });
+        } catch (catalogError) {
+          console.error('Catalog update failed (non-critical):', catalogError);
+        }
+      }
 
-      // Create entry voucher
-      const voucherResponse = await axios.post('/api/entry-vouchers', {
-        voucher_number: voucherNumber,
+      // Create the voucher and add every item to stock in ONE atomic request.
+      // Stock increases exactly once per item (the old flow added it twice).
+      const items = selectedItems.map(item => ({
+        item_name: item.item_name,
+        quantity: item.quantity,
+        unit: item.unit,
+        notes: item.notes || '',
+        place: (item.place || '').trim() || null
+      }));
+
+      await axios.post('/api/entry-vouchers', {
+        voucher_number: formattedVoucherNumber,
         date: fullDateTime,
         handled_by: voucherData.handledBy,
         taken_by: voucherData.takenBy,
         place: voucherData.place || null,
-        notes: voucherData.notes
+        notes: voucherData.notes,
+        items
       });
-
-      const voucherId = voucherResponse.data.voucher_id;
-
-      // Add each item to the voucher and stock
-      for (const item of selectedItems) {
-        // Save/update in product catalog so it's remembered with correct unit next time
-        await axios.post('/api/product-catalog', {
-          item_name: item.item_name,
-          default_unit: item.unit,
-          notes: item.notes || ''
-        });
-
-        // Add item to stock (creates new or merges into existing)
-        const stockResponse = await axios.post('/api/stock-items', {
-          item_name: item.item_name,
-          quantity: item.quantity,
-          unit: item.unit,
-          notes: item.notes
-        });
-
-        const stockItem = stockResponse.data;
-        console.log('Stock item created/updated:', stockItem);
-        console.log('Stock item ID:', stockItem.item_id);
-
-        // Add to voucher details with priority:
-        // 1) item's own emplacement if provided
-        // 2) otherwise, voucher-level emplacement
-        const trimmedItemPlace = (item.place || '').trim();
-        const trimmedVoucherPlace = (voucherData.place || '').trim();
-        const itemPlace = trimmedItemPlace || trimmedVoucherPlace || null;
-        
-        const detailData = {
-          voucher_id: voucherId,
-          item_id: stockItem.item_id,
-          quantity: item.quantity,
-          place: itemPlace
-        };
-        console.log('Sending to voucher details:', detailData);
-        
-        await axios.post('/api/entry-vouchers/details', detailData);
-        console.log('Item added to voucher details successfully');
-      }
 
       alert('Bon d\'entrée créé avec succès!');
       
-      // Reset form
+      // Reset form (keep the logged-in handler pre-filled)
       setSelectedItems([]);
-      setVoucherData({
+      setVoucherData(prev => ({
         voucherNumber: '',
-        handledBy: '',
+        date: getTodayDate(),
+        time: '',
+        handledBy: prev.handledBy,
         takenBy: '',
         place: '',
         notes: ''
-      });
+      }));
       
     } catch (error) {
       console.error('Error creating voucher:', error);
@@ -491,6 +491,57 @@ const BonEntree = () => {
               </h2>
 
               <div className="space-y-4">
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Numéro du bon <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center">
+                    <span className="px-3 py-2 bg-slate-100 border border-r-0 border-slate-300 rounded-l-lg font-semibold text-slate-700">
+                      E-
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={voucherData.voucherNumber}
+                      onChange={(e) => setVoucherData(prev => ({ ...prev, voucherNumber: e.target.value }))}
+                      placeholder="Ex: 1"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-r-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                    />
+                  </div>
+                  {formatVoucherNumber('E', voucherData.voucherNumber) && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Enregistré comme{' '}
+                      <span className="font-semibold text-emerald-600">
+                        {formatVoucherNumber('E', voucherData.voucherNumber)}
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={voucherData.date}
+                    onChange={(e) => setVoucherData(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Heure <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={voucherData.time}
+                    onChange={(e) => setVoucherData(prev => ({ ...prev, time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  />
+                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">

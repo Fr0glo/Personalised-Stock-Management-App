@@ -1,5 +1,6 @@
 import express from 'express';
 import { runQuery, getRow, getAll } from '../database/connection.js';
+import { runTransaction, resolveUserId, writeAudit } from '../database/inventory.js';
 
 const router = express.Router();
 
@@ -56,7 +57,11 @@ router.post('/', async (req, res) => {
     const itemPlace = place || (voucherInfo ? voucherInfo.place : null);
     
     // Use the taken_by worker from the voucher, or default to 1 if not specified
-    const workerId = voucherInfo && voucherInfo.taken_by ? voucherInfo.taken_by : 1;
+    // Use the voucher's worker; if absent, fall back to any existing worker
+    // rather than assuming a hardcoded worker_id of 1.
+    const workerId = (voucherInfo && voucherInfo.taken_by)
+      || (await getRow('SELECT MIN(worker_id) AS id FROM workers'))?.id
+      || null;
 
     // Add this item to the entry voucher details
     console.log('Inserting entry detail:', {
@@ -105,16 +110,33 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update entry voucher detail
+// Update entry voucher detail (adjusts stock by the difference, audited)
 router.put('/:detailId', async (req, res) => {
   try {
     const { detailId } = req.params;
-    const { quantity, unit } = req.body;
+    const { quantity, edited_by } = req.body;
+    const newQty = Number(quantity);
+    if (!Number.isFinite(newQty) || newQty <= 0) {
+      return res.status(400).json({ error: 'Valid quantity is required' });
+    }
 
-    await runQuery(
-      'UPDATE entryDetails SET quantity = ?, unit = ? WHERE detail_id = ?',
-      [quantity, unit, detailId]
-    );
+    const detail = await getRow('SELECT entry_detail_id, item_id, quantity FROM entryDetails WHERE entry_detail_id = ?', [detailId]);
+    if (!detail) return res.status(404).json({ error: 'Entry voucher detail not found' });
+
+    const actorUserId = await resolveUserId(edited_by);
+    await runTransaction(async () => {
+      // The entry added detail.quantity; it should now add newQty.
+      // Stock therefore changes by (new - old).
+      if (detail.item_id) {
+        const cur = await getRow('SELECT quantity FROM stockItems WHERE item_id = ?', [detail.item_id]);
+        if (cur) {
+          const after = Math.max(0, cur.quantity + (newQty - detail.quantity));
+          await runQuery('UPDATE stockItems SET quantity = ? WHERE item_id = ?', [after, detail.item_id]);
+          await writeAudit('adjustment', detail.item_id, actorUserId, cur.quantity, after);
+        }
+      }
+      await runQuery('UPDATE entryDetails SET quantity = ? WHERE entry_detail_id = ?', [newQty, detailId]);
+    });
 
     res.json({ message: 'Entry voucher detail updated successfully' });
   } catch (error) {
@@ -123,12 +145,26 @@ router.put('/:detailId', async (req, res) => {
   }
 });
 
-// Delete entry voucher detail
+// Delete entry voucher detail (removes the stock it had added, audited)
 router.delete('/:detailId', async (req, res) => {
   try {
     const { detailId } = req.params;
 
-    await runQuery('DELETE FROM entryDetails WHERE detail_id = ?', [detailId]);
+    const detail = await getRow('SELECT entry_detail_id, item_id, quantity FROM entryDetails WHERE entry_detail_id = ?', [detailId]);
+    if (!detail) return res.status(404).json({ error: 'Entry voucher detail not found' });
+
+    const actorUserId = await resolveUserId(req.body?.deleted_by);
+    await runTransaction(async () => {
+      if (detail.item_id) {
+        const cur = await getRow('SELECT quantity FROM stockItems WHERE item_id = ?', [detail.item_id]);
+        if (cur) {
+          const after = Math.max(0, cur.quantity - detail.quantity); // undo the entry
+          await runQuery('UPDATE stockItems SET quantity = ? WHERE item_id = ?', [after, detail.item_id]);
+          await writeAudit('entry_reversal', detail.item_id, actorUserId, cur.quantity, after);
+        }
+      }
+      await runQuery('DELETE FROM entryDetails WHERE entry_detail_id = ?', [detailId]);
+    });
 
     res.json({ message: 'Entry voucher detail deleted successfully' });
   } catch (error) {

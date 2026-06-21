@@ -1,5 +1,6 @@
 import express from 'express';
 import { getAll, getRow, runQuery } from '../database/connection.js';
+import { runTransaction, resolveUserId, applyExitItem, applyExitUnregistered, reverseExitVoucher } from '../database/inventory.js';
 
 const router = express.Router();
 
@@ -25,7 +26,26 @@ const ensureExitVoucherSchema = async () => {
   exitSchemaEnsured = true;
 };
 
-const buildExitVoucherResponse = (vouchers, details) => {
+// Make sure the "not found" items table exists even before migrations run.
+let unregisteredEnsured = false;
+const ensureUnregisteredTable = async () => {
+  if (unregisteredEnsured) return;
+  await runQuery(`
+    CREATE TABLE IF NOT EXISTS exitUnregisteredItems (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exit_id INTEGER NOT NULL,
+      item_name TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      worker_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (exit_id) REFERENCES exitVouchers (exit_id),
+      FOREIGN KEY (worker_id) REFERENCES workers (worker_id)
+    )
+  `);
+  unregisteredEnsured = true;
+};
+
+const buildExitVoucherResponse = (vouchers, details, unregistered = []) => {
   const detailsMap = details.reduce((acc, detail) => {
     if (!acc[detail.exit_id]) {
       acc[detail.exit_id] = [];
@@ -36,10 +56,27 @@ const buildExitVoucherResponse = (vouchers, details) => {
       item_name: detail.item_name || 'Article indisponible',
       quantity: detail.quantity,
       worker_id: detail.worker_id,
-      worker_name: detail.worker_name
+      worker_name: detail.worker_name,
+      is_unregistered: false
     });
     return acc;
   }, {});
+
+  // Append "not found" items so they show on the voucher, flagged.
+  unregistered.forEach(item => {
+    if (!detailsMap[item.exit_id]) {
+      detailsMap[item.exit_id] = [];
+    }
+    detailsMap[item.exit_id].push({
+      exit_detail_id: `u_${item.id}`,
+      item_id: null,
+      item_name: item.item_name,
+      quantity: item.quantity,
+      worker_id: item.worker_id,
+      worker_name: item.worker_name,
+      is_unregistered: true
+    });
+  });
 
   return vouchers.map(voucher => ({
     ...voucher,
@@ -83,7 +120,19 @@ router.get('/', async (req, res) => {
       LEFT JOIN workers w ON ed.worker_id = w.worker_id
     `);
 
-    res.json(buildExitVoucherResponse(vouchers, details));
+    await ensureUnregisteredTable();
+    const unregistered = await getAll(`
+      SELECT u.id,
+             u.exit_id,
+             u.item_name,
+             u.quantity,
+             u.worker_id,
+             COALESCE(w.F_Name || ' ' || w.Surname, '') AS worker_name
+      FROM exitUnregisteredItems u
+      LEFT JOIN workers w ON u.worker_id = w.worker_id
+    `);
+
+    res.json(buildExitVoucherResponse(vouchers, details, unregistered));
   } catch (error) {
     console.error('Error fetching exit vouchers:', error);
     res.status(500).json({ error: 'Failed to fetch exit vouchers' });
@@ -124,14 +173,41 @@ router.get('/:id', async (req, res) => {
       LEFT JOIN workers w ON ed.worker_id = w.worker_id
       WHERE ed.exit_id = ?
     `, [req.params.id]);
-    
+
+    await ensureUnregisteredTable();
+    const unregistered = await getAll(`
+      SELECT u.id,
+             u.exit_id,
+             u.item_name,
+             u.quantity,
+             u.worker_id,
+             COALESCE(w.F_Name || ' ' || w.Surname, '') AS worker_name
+      FROM exitUnregisteredItems u
+      LEFT JOIN workers w ON u.worker_id = w.worker_id
+      WHERE u.exit_id = ?
+    `, [req.params.id]);
+
+    const mergedDetails = [
+      ...details.map(d => ({ ...d, is_unregistered: false })),
+      ...unregistered.map(u => ({
+        exit_detail_id: `u_${u.id}`,
+        exit_id: u.exit_id,
+        item_id: null,
+        item_name: u.item_name,
+        quantity: u.quantity,
+        worker_id: u.worker_id,
+        worker_name: u.worker_name,
+        is_unregistered: true
+      }))
+    ];
+
     res.json({
       ...voucher,
       taken_by_name: voucher.taken_by_first_name
         ? `${voucher.taken_by_first_name} ${voucher.taken_by_last_name}`.trim()
         : null,
       office_staff: voucher.handled_by_name ? [{ username: voucher.handled_by_name }] : [],
-      details
+      details: mergedDetails
     });
   } catch (error) {
     console.error('Error fetching exit voucher:', error);
@@ -214,6 +290,34 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Preferred path: the whole voucher + its items are created atomically in a
+    // single transaction. If any item fails (e.g. insufficient stock), the whole
+    // thing rolls back — no partial voucher, no half-applied stock changes.
+    const items = Array.isArray(req.body.items) ? req.body.items : null;
+    if (items) {
+      try {
+        const voucherId = await runTransaction(async () => {
+          const vr = await runQuery(
+            'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
+            [voucher_number || null, date || new Date().toISOString(), handledByUserId, takenByWorkerId, place || null, notes || null]
+          );
+          const vid = vr.id;
+          for (const it of items) {
+            if (it.is_unregistered) {
+              await applyExitUnregistered({ voucherId: vid, item_name: it.item_name, quantity: Number(it.quantity), workerId: takenByWorkerId });
+            } else {
+              await applyExitItem({ voucherId: vid, item_id: it.item_id, quantity: Number(it.quantity), workerId: takenByWorkerId, actorUserId: handledByUserId });
+            }
+          }
+          return vid;
+        });
+        return res.status(201).json({ voucher_id: voucherId, exit_id: voucherId, message: 'Exit voucher created successfully' });
+      } catch (txError) {
+        console.error('Transactional exit voucher creation failed:', txError.message);
+        return res.status(400).json({ error: 'Failed to create exit voucher', details: txError.message });
+      }
+    }
+
     // Try to create the voucher, handling foreign key issues if they come up
     let voucherResult;
     try {
@@ -281,8 +385,16 @@ router.delete('/:id', async (req, res) => {
     const voucher = await getRow('SELECT * FROM exitVouchers WHERE exit_id = ?', [req.params.id]);
     if (!voucher) return res.status(404).json({ error: 'Bon introuvable' });
 
-    await runQuery('DELETE FROM exitDetails WHERE exit_id = ?', [req.params.id]);
-    await runQuery('DELETE FROM exitVouchers WHERE exit_id = ?', [req.params.id]);
+    await ensureUnregisteredTable();
+    // Deleting an exit voucher returns its items to stock (reverse the exit),
+    // then removes the voucher — all atomically.
+    const actorUserId = (await resolveUserId(req.body?.deleted_by)) ?? voucher.handled_by;
+    await runTransaction(async () => {
+      await reverseExitVoucher(req.params.id, actorUserId);
+      await runQuery('DELETE FROM exitDetails WHERE exit_id = ?', [req.params.id]);
+      await runQuery('DELETE FROM exitUnregisteredItems WHERE exit_id = ?', [req.params.id]);
+      await runQuery('DELETE FROM exitVouchers WHERE exit_id = ?', [req.params.id]);
+    });
     res.json({ message: 'Bon supprimé' });
   } catch (error) {
     console.error('Error deleting exit voucher:', error);
@@ -293,7 +405,9 @@ router.delete('/:id', async (req, res) => {
 // DELETE all exit vouchers
 router.delete('/', async (req, res) => {
   try {
+    await ensureUnregisteredTable();
     await runQuery('DELETE FROM exitDetails', []);
+    await runQuery('DELETE FROM exitUnregisteredItems', []);
     await runQuery('DELETE FROM exitVouchers', []);
     res.json({ message: 'Tous les bons de sortie supprimés' });
   } catch (error) {
