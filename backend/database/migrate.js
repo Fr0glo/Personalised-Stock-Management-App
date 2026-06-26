@@ -1,7 +1,7 @@
 import sqlite3 from 'sqlite3';
 import fs from 'fs';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -67,7 +67,7 @@ const runMigrations = async (direction = 'up', target = null) => {
 
       for (const file of pending) {
         console.log(`Applying: ${file}`);
-        const migration = await import(join(MIGRATIONS_DIR, file));
+        const migration = await import(pathToFileURL(join(MIGRATIONS_DIR, file)).href);
         await migration.up(db);
         await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
         console.log(`  Applied: ${file}`);
@@ -83,7 +83,7 @@ const runMigrations = async (direction = 'up', target = null) => {
           continue;
         }
         console.log(`Rolling back: ${file}`);
-        const migration = await import(join(MIGRATIONS_DIR, file));
+        const migration = await import(pathToFileURL(join(MIGRATIONS_DIR, file)).href);
         if (!migration.down) {
           console.log(`  No down() defined for ${file}, skipping.`);
           continue;
