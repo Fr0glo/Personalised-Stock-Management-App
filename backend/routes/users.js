@@ -56,18 +56,22 @@ router.get('/:id', async (req, res) => {
 // POST create new user
 router.post('/', async (req, res) => {
   try {
-    const { username, role } = req.body;
-    
+    await ensureUsersSchema();
+    const { username, role, password } = req.body;
+
     if (!username) {
       return res.status(400).json({ error: 'Username is required' });
     }
-    
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
     const result = await runQuery(
-      'INSERT INTO users (username, role) VALUES (?, ?)',
-      [username, role || 'staff']
+      'INSERT INTO users (username, role, password) VALUES (?, ?, ?)',
+      [username.trim(), role || 'office', password]
     );
-    
-    const createdUser = await getRow('SELECT * FROM users WHERE user_id = ?', [result.id]);
+
+    const createdUser = await getRow('SELECT user_id, username, role FROM users WHERE user_id = ?', [result.id]);
     res.status(201).json(createdUser);
   } catch (error) {
     console.error('Error creating user:', error);
@@ -79,29 +83,40 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT update user
+// PUT update user (username required; role and password optional — only changed if sent)
 router.put('/:id', async (req, res) => {
   try {
-    const { username, role } = req.body;
-    
+    await ensureUsersSchema();
+    const { username, role, password } = req.body;
+
     if (!username) {
       return res.status(400).json({ error: 'Username is required' });
     }
-    
-    const result = await runQuery(
-      'UPDATE users SET username = ?, role = ? WHERE user_id = ?',
-      [username, role, req.params.id]
-    );
-    
-    if (result.changes === 0) {
+
+    const existing = await getRow('SELECT * FROM users WHERE user_id = ?', [req.params.id]);
+    if (!existing) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
-    const updatedUser = await getRow('SELECT * FROM users WHERE user_id = ?', [req.params.id]);
+
+    await runQuery(
+      'UPDATE users SET username = ?, role = ?, password = ? WHERE user_id = ?',
+      [
+        username.trim(),
+        role !== undefined ? role : existing.role,
+        (password !== undefined && password !== '') ? password : existing.password,
+        req.params.id
+      ]
+    );
+
+    const updatedUser = await getRow('SELECT user_id, username, role FROM users WHERE user_id = ?', [req.params.id]);
     res.json(updatedUser);
   } catch (error) {
     console.error('Error updating user:', error);
-    res.status(500).json({ error: 'Failed to update user' });
+    if (error.message.includes('UNIQUE constraint failed')) {
+      res.status(400).json({ error: 'Username already exists' });
+    } else {
+      res.status(500).json({ error: 'Failed to update user' });
+    }
   }
 });
 

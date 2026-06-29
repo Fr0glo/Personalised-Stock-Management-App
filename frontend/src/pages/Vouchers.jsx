@@ -132,16 +132,27 @@ const Vouchers = () => {
       document.getElementById(`vpin-${index - 1}`)?.focus();
   };
 
-  const verifyPin = () => {
-    if (pinCode.join('') === '3739') {
-      setIsAdminMode(true);
-      setShowPinModal(false);
-      setPinCode(['', '', '', '']); 
-      setPinError(false);
-    } else {
+  const verifyPin = async () => {
+    try {
+      const res = await fetch('/api/settings/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinCode.join('') })
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setIsAdminMode(true);
+        setShowPinModal(false);
+        setPinCode(['', '', '', '']);
+        setPinError(false);
+      } else {
+        setPinError(true);
+        setPinCode(['', '', '', '']);
+        document.getElementById('vpin-0')?.focus();
+      }
+    } catch {
       setPinError(true);
       setPinCode(['', '', '', '']);
-      document.getElementById('vpin-0')?.focus();
     }
   };
 

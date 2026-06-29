@@ -9,7 +9,8 @@ import {
   User,
   LogOut,
   Clock,
-  BarChart3
+  BarChart3,
+  UserCog
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -59,9 +60,12 @@ const Sidebar = () => {
     { path: '/pending-orders', label: 'Commandes en Attente', icon: Clock },
     { path: '/vouchers', label: 'Les bons', icon: FileText },
     { path: '/personnel', label: 'Personnel', icon: Users },
-    // Admin-only analytics dashboard
+    // Admin-only pages
     ...(currentUser?.role === 'superadmin'
-      ? [{ path: '/analyse', label: 'Analyse', icon: BarChart3 }]
+      ? [
+          { path: '/analyse', label: 'Analyse', icon: BarChart3 },
+          { path: '/comptes', label: 'Comptes', icon: UserCog },
+        ]
       : []),
   ];
 

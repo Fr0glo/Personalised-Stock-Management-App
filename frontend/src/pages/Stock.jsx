@@ -108,15 +108,26 @@ const Stock = () => {
     }
   };
 
-  // Verify PIN and enable edit mode
-  const verifyPin = () => {
+  // Verify PIN (against the admin code stored on the server) and enable edit mode
+  const verifyPin = async () => {
     const enteredPin = pinCode.join('');
-    if (enteredPin === '3739') {
-      setIsEditMode(true);
-      setShowPinModal(false);
-      setPinCode(['', '', '', '']);
-    } else {
-      alert('Code PIN incorrect');
+    try {
+      const res = await fetch('/api/settings/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: enteredPin })
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setIsEditMode(true);
+        setShowPinModal(false);
+        setPinCode(['', '', '', '']);
+      } else {
+        alert('Code PIN incorrect');
+        setPinCode(['', '', '', '']);
+      }
+    } catch {
+      alert('Erreur de vérification du code');
       setPinCode(['', '', '', '']);
     }
   };
