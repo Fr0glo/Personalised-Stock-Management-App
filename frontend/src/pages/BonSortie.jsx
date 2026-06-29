@@ -36,6 +36,7 @@ const BonSortie = () => {
     time: '',
     handledBy: '',
     takenBy: '',
+    destination: '',
     notes: ''
   });
 
@@ -316,6 +317,7 @@ const BonSortie = () => {
         handled_by: voucherData.handledBy,
         taken_by: voucherData.takenBy,
         place: null,
+        destination: voucherData.destination,
         notes: voucherData.notes,
         items
       });
@@ -330,6 +332,7 @@ const BonSortie = () => {
         time: '',
         handledBy: prev.handledBy,
         takenBy: '',
+        destination: '',
         notes: ''
       }));
       
@@ -800,6 +803,19 @@ const BonSortie = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Destination
+                  </label>
+                  <input
+                    type="text"
+                    value={voucherData.destination}
+                    onChange={(e) => setVoucherData(prev => ({ ...prev, destination: e.target.value }))}
+                    placeholder="Où vont les articles (chantier, lieu...)"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  />
                 </div>
               </div>
 

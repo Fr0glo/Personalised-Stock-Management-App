@@ -22,6 +22,7 @@ const ensureExitVoucherSchema = async () => {
   await addColumnIfMissing('taken_by', 'INTEGER');
   await addColumnIfMissing('notes', 'TEXT');
   await addColumnIfMissing('place', 'TEXT');
+  await addColumnIfMissing('destination', 'TEXT');
 
   exitSchemaEnsured = true;
 };
@@ -218,12 +219,20 @@ router.get('/:id', async (req, res) => {
 // POST create new exit voucher
 router.post('/', async (req, res) => {
   try {
-    const { voucher_number, date, handled_by, taken_by, place, notes } = req.body;
+    const { voucher_number, date, handled_by, taken_by, place, notes, destination } = req.body;
 
     await ensureExitVoucherSchema();
 
     if (!handled_by) {
       return res.status(400).json({ error: 'Handled by is required' });
+    }
+
+    // Voucher numbers must be unique — block duplicates so each bon is one-of-a-kind.
+    if (voucher_number) {
+      const dup = await getRow('SELECT exit_id FROM exitVouchers WHERE voucher_number = ?', [voucher_number]);
+      if (dup) {
+        return res.status(400).json({ error: `Le bon ${voucher_number} existe déjà. Chaque numéro de bon doit être unique.` });
+      }
     }
 
     console.log('Creating exit voucher with data:', {
@@ -298,8 +307,8 @@ router.post('/', async (req, res) => {
       try {
         const voucherId = await runTransaction(async () => {
           const vr = await runQuery(
-            'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
-            [voucher_number || null, date || new Date().toISOString(), handledByUserId, takenByWorkerId, place || null, notes || null]
+            'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes, destination) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [voucher_number || null, date || new Date().toISOString(), handledByUserId, takenByWorkerId, place || null, notes || null, destination || null]
           );
           const vid = vr.id;
           for (const it of items) {
@@ -322,14 +331,15 @@ router.post('/', async (req, res) => {
     let voucherResult;
     try {
       voucherResult = await runQuery(
-        'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes, destination) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
           voucher_number || null,
           date || new Date().toISOString(),
           handledByUserId,
           takenByWorkerId,
           place || null,
-          notes || null
+          notes || null,
+          destination || null
         ]
       );
     } catch (fkError) {
@@ -339,14 +349,15 @@ router.post('/', async (req, res) => {
         await runQuery('PRAGMA foreign_keys = OFF');
         try {
           voucherResult = await runQuery(
-            'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO exitVouchers (voucher_number, date, handled_by, taken_by, place, notes, destination) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
               voucher_number || null,
               date || new Date().toISOString(),
               handledByUserId,
               takenByWorkerId,
               place || null,
-              notes || null
+              notes || null,
+              destination || null
             ]
           );
         } finally {
