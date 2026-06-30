@@ -441,8 +441,10 @@ const BonEntree = () => {
                             </button>
                             <input
                               type="number"
-                              value={item.quantity}
-                              onChange={(e) => updateQuantity(item.catalog_id, parseInt(e.target.value))}
+                              value={item.quantity || ''}
+                              placeholder="0"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updateQuantity(item.catalog_id, parseInt(e.target.value) || 0)}
                               className="w-20 px-2 py-1 border border-slate-300 rounded text-center"
                               min="0"
                             />

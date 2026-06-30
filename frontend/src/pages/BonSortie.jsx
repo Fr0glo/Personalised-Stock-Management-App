@@ -672,8 +672,10 @@ const BonSortie = () => {
                             </button>
                             <input
                               type="number"
-                              value={item.quantity}
-                              onChange={(e) => updateQuantity(item.item_id, parseInt(e.target.value))}
+                              value={item.quantity || ''}
+                              placeholder="0"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updateQuantity(item.item_id, parseInt(e.target.value) || 0)}
                               className="w-20 px-2 py-1 border border-slate-300 rounded text-center"
                               min="0"
                               max={item.is_unregistered ? undefined : item.max_quantity}

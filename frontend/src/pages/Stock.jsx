@@ -432,7 +432,9 @@ const Stock = () => {
                 <input
                   type="number"
                   min="0"
+                  placeholder="0"
                   value={editingItems[item.item_id].quantity || ''}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setEditingItems(prev => ({
                     ...prev,
                     [item.item_id]: {
@@ -779,7 +781,9 @@ const Stock = () => {
                   <input
                     type="number"
                     min="0"
-                    value={newItem.quantity}
+                    value={newItem.quantity || ''}
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setNewItem(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />

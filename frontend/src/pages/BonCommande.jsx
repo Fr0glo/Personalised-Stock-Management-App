@@ -116,7 +116,8 @@ const BonCommande = () => {
                       <div className="flex items-center gap-1">
                         <button onClick={() => setQte(s.item_id, sel.qte - 1)} className="p-1 hover:bg-slate-100 rounded"><Minus className="h-4 w-4" /></button>
                         <input
-                          type="number" min="0" value={sel.qte}
+                          type="number" min="0" value={sel.qte || ''} placeholder="0"
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => setQte(s.item_id, parseInt(e.target.value) || 0)}
                           className="w-14 px-1 py-1 border border-slate-300 rounded text-center text-sm"
                         />
