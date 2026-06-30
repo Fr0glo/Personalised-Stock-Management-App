@@ -204,7 +204,7 @@ const BonSortie = () => {
       const newItem = {
         item_id: product.item_id,
         item_name: product.item_name,
-        quantity: 1,
+        quantity: 0,
         unit: product.unit || 'pcs',
         notes: product.notes || '',
         current_stock: product.quantity || 0,
@@ -235,7 +235,7 @@ const BonSortie = () => {
       setSelectedItems(prev => [...prev, {
         item_id: `unreg_${Date.now()}`, // string id: unique and never matches a real stock item
         item_name: trimmed,
-        quantity: 1,
+        quantity: 0,
         unit: unit || 'pcs',
         is_unregistered: true
       }]);
@@ -270,6 +270,11 @@ const BonSortie = () => {
   const submitVoucher = async () => {
     if (selectedItems.length === 0) {
       alert('Veuillez ajouter au moins un article');
+      return;
+    }
+
+    if (selectedItems.some(it => !it.quantity || it.quantity <= 0)) {
+      alert('Veuillez indiquer la quantité pour chaque article');
       return;
     }
 

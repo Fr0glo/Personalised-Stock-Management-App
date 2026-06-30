@@ -126,7 +126,7 @@ const BonEntree = () => {
       const newItem = {
         catalog_id: product.catalog_id,
         item_name: product.item_name,
-        quantity: 1,
+        quantity: 0,
         unit: product.default_unit || 'pcs',
         notes: product.notes || '',
         place: '', // Individual place for this item
@@ -198,7 +198,7 @@ const BonEntree = () => {
         ? {
             catalog_id: match.catalog_id,
             item_name: match.item_name,
-            quantity: 1,
+            quantity: 0,
             unit: match.default_unit || 'pcs',
             notes: match.notes || '',
             place: '',
@@ -207,7 +207,7 @@ const BonEntree = () => {
         : {
             catalog_id: `new_${Date.now()}`,
             item_name: name,
-            quantity: 1,
+            quantity: 0,
             unit: 'pcs',
             notes: '',
             place: '',
@@ -225,6 +225,11 @@ const BonEntree = () => {
   const submitVoucher = async () => {
     if (selectedItems.length === 0) {
       alert('Veuillez ajouter au moins un article');
+      return;
+    }
+
+    if (selectedItems.some(it => !it.quantity || it.quantity <= 0)) {
+      alert('Veuillez indiquer la quantité pour chaque article');
       return;
     }
 

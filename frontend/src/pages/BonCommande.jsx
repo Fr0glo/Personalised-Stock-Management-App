@@ -40,12 +40,13 @@ const BonCommande = () => {
 
   const add = (s) => setOrder(prev => prev.some(o => o.item_id === s.item_id)
     ? prev
-    : [...prev, { item_id: s.item_id, article: s.item_name, qte: 1, unite: s.unit || 'U' }]);
+    : [...prev, { item_id: s.item_id, article: s.item_name, qte: 0, unite: s.unit || 'U' }]);
   const setQte = (id, qte) => setOrder(prev => prev.map(o => o.item_id === id ? { ...o, qte: Math.max(0, qte) } : o));
   const remove = (id) => setOrder(prev => prev.filter(o => o.item_id !== id));
 
   const generate = async () => {
     if (order.length === 0) { alert('Ajoutez au moins un article'); return; }
+    if (order.some(o => !o.qte || o.qte <= 0)) { alert('Indiquez la quantité pour chaque article.'); return; }
     setIsGenerating(true);
     try {
       const res = await axios.post('/api/bon-commande', {
@@ -163,7 +164,7 @@ const BonCommande = () => {
                     <span className="flex items-center gap-1 text-slate-700 truncate">
                       <Check className="h-3.5 w-3.5 text-green-600 flex-shrink-0" /> {o.article}
                     </span>
-                    <span className="text-slate-500 whitespace-nowrap ml-2">{o.qte} {o.unite}</span>
+                    <span className="text-slate-500 whitespace-nowrap ml-2">{o.qte || '—'} {o.unite}</span>
                   </div>
                 ))}
               </div>
