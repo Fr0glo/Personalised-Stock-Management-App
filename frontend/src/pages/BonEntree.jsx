@@ -174,22 +174,49 @@ const BonEntree = () => {
     setSelectedItems(prev => prev.filter(item => item.catalog_id !== catalogId));
   };
 
-  // Add new product (if not found in search)
-  const addNewProduct = () => {
-    if (!searchTerm.trim()) return;
-    
-    const newItem = {
-      catalog_id: `new_${Date.now()}`, // Temporary ID for new items
-      item_name: searchTerm.trim(),
-      quantity: 1,
-      unit: 'pcs',
-      notes: '',
-      place: '', // Individual place for this item
-      current_stock: 0,
-      isNew: true
-    };
-    
-    setSelectedItems(prev => [...prev, newItem]);
+  // Add a typed product. If the name already exists in the catalogue, reuse its
+  // remembered unit (e.g. "metre") instead of defaulting to "pcs" — so the unit
+  // stays consistent and the database stays clean.
+  const addNewProduct = async () => {
+    const name = searchTerm.trim();
+    if (!name) return;
+
+    let match = null;
+    try {
+      const res = await axios.get(`/api/product-catalog?search=${encodeURIComponent(name)}&limit=20`);
+      match = (res.data || []).find(p => (p.item_name || '').trim().toLowerCase() === name.toLowerCase());
+    } catch (error) {
+      console.error('Catalog lookup failed:', error);
+    }
+
+    setSelectedItems(prev => {
+      // If this catalogue item is already in the list, just bump its quantity
+      if (match && prev.some(i => i.catalog_id === match.catalog_id)) {
+        return prev.map(i => i.catalog_id === match.catalog_id ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      const newItem = match
+        ? {
+            catalog_id: match.catalog_id,
+            item_name: match.item_name,
+            quantity: 1,
+            unit: match.default_unit || 'pcs',
+            notes: match.notes || '',
+            place: '',
+            current_stock: 0
+          }
+        : {
+            catalog_id: `new_${Date.now()}`,
+            item_name: name,
+            quantity: 1,
+            unit: 'pcs',
+            notes: '',
+            place: '',
+            current_stock: 0,
+            isNew: true
+          };
+      return [...prev, newItem];
+    });
+
     setSearchTerm('');
     setShowSearchResults(false);
   };
