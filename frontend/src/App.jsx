@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard';
 import Stock from './pages/Stock';
 import Orders from './pages/Orders';
 import PendingOrders from './pages/PendingOrders';
+import BonCommande from './pages/BonCommande';
+import BonCommandeHistorique from './pages/BonCommandeHistorique';
 import Vouchers from './pages/Vouchers';
 import Personnel from './pages/Personnel';
 import Analyse from './pages/Analyse';
@@ -75,6 +77,10 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/stock" element={<Stock />} />
+                  {/* Bon de Commande (replaces the order pages in the sidebar) */}
+                  <Route path="/bon-commande" element={<BonCommande />} />
+                  <Route path="/bon-commande/historique" element={<BonCommandeHistorique />} />
+                  {/* Old ordering system — kept reachable by URL so it can be brought back */}
                   <Route path="/orders" element={<Orders />} />
                   <Route path="/pending-orders" element={<PendingOrders />} />
                   <Route path="/vouchers" element={<Vouchers />} />

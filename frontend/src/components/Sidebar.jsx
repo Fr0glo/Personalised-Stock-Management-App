@@ -56,8 +56,8 @@ const Sidebar = () => {
   const navItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/stock', label: 'Stock', icon: Package },
-    { path: '/orders', label: 'Commander', icon: ShoppingCart },
-    { path: '/pending-orders', label: 'Commandes en Attente', icon: Clock },
+    { path: '/bon-commande', label: 'Bon de Commande', icon: ShoppingCart },
+    { path: '/bon-commande/historique', label: 'Historique commandes', icon: Clock },
     { path: '/vouchers', label: 'Les bons', icon: FileText },
     { path: '/personnel', label: 'Personnel', icon: Users },
     // Admin-only pages
