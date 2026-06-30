@@ -19,11 +19,12 @@ const BonCommande = () => {
     if (term.trim().length < 2) { setSearchResults([]); setShowResults(false); return; }
     setIsSearching(true);
     try {
-      const res = await axios.get(`/api/product-catalog?search=${encodeURIComponent(term.trim())}&limit=20`);
+      // Only items we actually have in stock (the magasinier prepares from stock)
+      const res = await axios.get(`/api/stock-items?search=${encodeURIComponent(term.trim())}&limit=20`);
       setSearchResults(res.data || []);
       setShowResults(true);
     } catch (err) {
-      console.error('Catalog search failed:', err);
+      console.error('Stock search failed:', err);
       setSearchResults([]);
     } finally {
       setIsSearching(false);
@@ -43,13 +44,6 @@ const BonCommande = () => {
     setSearchTerm('');
     setShowResults(false);
     setSearchResults([]);
-  };
-
-  const addTyped = () => {
-    const name = searchTerm.trim();
-    if (!name) return;
-    const match = searchResults.find(p => (p.item_name || '').trim().toLowerCase() === name.toLowerCase());
-    addItem(match ? match.item_name : name, match ? (match.default_unit || 'U') : 'U');
   };
 
   const updateQte = (key, qte) => setItems(prev => prev.map(it => it.key === key ? { ...it, qte: Math.max(0, qte) } : it));
@@ -103,8 +97,7 @@ const BonCommande = () => {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); search(e.target.value); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') addTyped(); }}
-                placeholder="Tapez le nom de l'article…"
+                placeholder="Tapez le nom de l'article en stock…"
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
               {isSearching && (
@@ -116,24 +109,21 @@ const BonCommande = () => {
               <div className="mt-3 max-h-60 overflow-y-auto border border-slate-200 rounded-lg">
                 {searchResults.map((p) => (
                   <div
-                    key={p.catalog_id}
-                    onClick={() => addItem(p.item_name, p.default_unit)}
+                    key={p.item_id}
+                    onClick={() => addItem(p.item_name, p.unit)}
                     className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 flex justify-between items-center"
                   >
                     <span className="font-medium text-slate-800">{p.item_name}</span>
-                    <span className="text-xs text-slate-500">{p.default_unit || 'U'}</span>
+                    <span className="text-xs text-slate-500">Stock : {p.quantity} {p.unit}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {searchTerm.trim() && !isSearching && (
-              <button
-                onClick={addTyped}
-                className="mt-3 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 flex items-center gap-1"
-              >
-                <Plus className="h-4 w-4" /> Ajouter « {searchTerm.trim()} »
-              </button>
+            {searchTerm.trim().length >= 2 && !isSearching && searchResults.length === 0 && (
+              <p className="mt-3 text-sm text-slate-500">
+                Aucun article en stock pour « {searchTerm.trim()} ». Seuls les articles disponibles en stock peuvent être commandés.
+              </p>
             )}
           </div>
 
