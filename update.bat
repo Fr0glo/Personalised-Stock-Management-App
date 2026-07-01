@@ -11,7 +11,7 @@ cd ..
 
 echo.
 echo [2/7] Pulling latest code from GitHub...
-git pull origin main
+git pull origin btpoulime
 if errorlevel 1 (
     echo ERROR: Git pull failed. Check your connection.
     pause
