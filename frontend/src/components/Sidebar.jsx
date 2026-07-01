@@ -10,7 +10,8 @@ import {
   LogOut,
   Clock,
   BarChart3,
-  UserCog
+  UserCog,
+  Building2
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -65,6 +66,7 @@ const Sidebar = () => {
       ? [
           { path: '/analyse', label: 'Analyse', icon: BarChart3 },
           { path: '/comptes', label: 'Comptes', icon: UserCog },
+          { path: '/entreprise', label: 'Entreprise', icon: Building2 },
         ]
       : []),
   ];
