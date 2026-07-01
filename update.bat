@@ -22,6 +22,15 @@ echo.
 echo [3/7] Installing backend dependencies...
 cd backend
 call npm install --production
+
+echo    Verifying SQLite driver...
+node -e "import('sqlite3').then(()=>process.exit(0)).catch(()=>process.exit(1))"
+if errorlevel 1 (
+    echo    SQLite driver not loading - rebuilding it...
+    rmdir /s /q node_modules\sqlite3
+    call npm cache clean --force
+    call npm install sqlite3
+)
 cd ..
 
 echo.
