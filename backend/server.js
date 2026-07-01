@@ -19,6 +19,8 @@ import exitVoucherDetailsRoutes from './routes/exitVoucherDetails.js';
 import auditLogRoutes from './routes/auditLogs.js';
 import orderRoutes from './routes/orders.js';
 import analyticsRoutes from './routes/analytics.js';
+import settingsRoutes from './routes/settings.js';
+import bonCommandeRoutes from './routes/bonCommande.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -56,6 +58,8 @@ app.use('/api/exit-vouchers', exitVoucherRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/bon-commande', bonCommandeRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -6,9 +6,12 @@ import Dashboard from './pages/Dashboard';
 import Stock from './pages/Stock';
 import Orders from './pages/Orders';
 import PendingOrders from './pages/PendingOrders';
+import BonCommande from './pages/BonCommande';
+import BonCommandeHistorique from './pages/BonCommandeHistorique';
 import Vouchers from './pages/Vouchers';
 import Personnel from './pages/Personnel';
 import Analyse from './pages/Analyse';
+import Comptes from './pages/Comptes';
 import Security from './pages/Security';
 import BonEntree from './pages/BonEntree';
 import BonSortie from './pages/BonSortie';
@@ -74,11 +77,16 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/stock" element={<Stock />} />
+                  {/* Bon de Commande (replaces the order pages in the sidebar) */}
+                  <Route path="/bon-commande" element={<BonCommande />} />
+                  <Route path="/bon-commande/historique" element={<BonCommandeHistorique />} />
+                  {/* Old ordering system — kept reachable by URL so it can be brought back */}
                   <Route path="/orders" element={<Orders />} />
                   <Route path="/pending-orders" element={<PendingOrders />} />
                   <Route path="/vouchers" element={<Vouchers />} />
                   <Route path="/personnel" element={<Personnel />} />
                   <Route path="/analyse" element={<Analyse />} />
+                  <Route path="/comptes" element={<Comptes />} />
                   <Route path="/bon-entree" element={<BonEntree />} />
                   <Route path="/bon-sortie" element={<BonSortie />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

@@ -36,6 +36,7 @@ const BonSortie = () => {
     time: '',
     handledBy: '',
     takenBy: '',
+    destination: '',
     notes: ''
   });
 
@@ -203,7 +204,7 @@ const BonSortie = () => {
       const newItem = {
         item_id: product.item_id,
         item_name: product.item_name,
-        quantity: 1,
+        quantity: 0,
         unit: product.unit || 'pcs',
         notes: product.notes || '',
         current_stock: product.quantity || 0,
@@ -234,7 +235,7 @@ const BonSortie = () => {
       setSelectedItems(prev => [...prev, {
         item_id: `unreg_${Date.now()}`, // string id: unique and never matches a real stock item
         item_name: trimmed,
-        quantity: 1,
+        quantity: 0,
         unit: unit || 'pcs',
         is_unregistered: true
       }]);
@@ -269,6 +270,11 @@ const BonSortie = () => {
   const submitVoucher = async () => {
     if (selectedItems.length === 0) {
       alert('Veuillez ajouter au moins un article');
+      return;
+    }
+
+    if (selectedItems.some(it => !it.quantity || it.quantity <= 0)) {
+      alert('Veuillez indiquer la quantité pour chaque article');
       return;
     }
 
@@ -316,6 +322,7 @@ const BonSortie = () => {
         handled_by: voucherData.handledBy,
         taken_by: voucherData.takenBy,
         place: null,
+        destination: voucherData.destination,
         notes: voucherData.notes,
         items
       });
@@ -330,6 +337,7 @@ const BonSortie = () => {
         time: '',
         handledBy: prev.handledBy,
         takenBy: '',
+        destination: '',
         notes: ''
       }));
       
@@ -669,8 +677,10 @@ const BonSortie = () => {
                             </button>
                             <input
                               type="number"
-                              value={item.quantity}
-                              onChange={(e) => updateQuantity(item.item_id, parseInt(e.target.value))}
+                              value={item.quantity || ''}
+                              placeholder="0"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updateQuantity(item.item_id, parseInt(e.target.value) || 0)}
                               className="w-20 px-2 py-1 border border-slate-300 rounded text-center"
                               min="0"
                               max={item.is_unregistered ? undefined : item.max_quantity}
@@ -800,6 +810,19 @@ const BonSortie = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Destination
+                  </label>
+                  <input
+                    type="text"
+                    value={voucherData.destination}
+                    onChange={(e) => setVoucherData(prev => ({ ...prev, destination: e.target.value }))}
+                    placeholder="Où vont les articles (chantier, lieu...)"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  />
                 </div>
               </div>
 

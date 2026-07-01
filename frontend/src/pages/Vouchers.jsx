@@ -132,16 +132,27 @@ const Vouchers = () => {
       document.getElementById(`vpin-${index - 1}`)?.focus();
   };
 
-  const verifyPin = () => {
-    if (pinCode.join('') === '3739') {
-      setIsAdminMode(true);
-      setShowPinModal(false);
-      setPinCode(['', '', '', '']); 
-      setPinError(false);
-    } else {
+  const verifyPin = async () => {
+    try {
+      const res = await fetch('/api/settings/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinCode.join('') })
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setIsAdminMode(true);
+        setShowPinModal(false);
+        setPinCode(['', '', '', '']);
+        setPinError(false);
+      } else {
+        setPinError(true);
+        setPinCode(['', '', '', '']);
+        document.getElementById('vpin-0')?.focus();
+      }
+    } catch {
       setPinError(true);
       setPinCode(['', '', '', '']);
-      document.getElementById('vpin-0')?.focus();
     }
   };
 
@@ -168,6 +179,22 @@ const Vouchers = () => {
       if (!res.ok) throw new Error('Failed');
       if (activeTab === 'entry') setEntryVouchers([]);
       else setExitVouchers([]);
+    } catch {
+      alert('Erreur lors de la réinitialisation');
+    }
+  };
+
+  // Clear ALL bons — both entrée and sortie — in one action.
+  const resetAllBons = async () => {
+    if (!window.confirm('Réinitialiser TOUS les bons (entrée ET sortie) ? Cette action est irréversible.')) return;
+    try {
+      const [r1, r2] = await Promise.all([
+        fetch('/api/entry-vouchers', { method: 'DELETE' }),
+        fetch('/api/exit-vouchers', { method: 'DELETE' })
+      ]);
+      if (!r1.ok || !r2.ok) throw new Error('Failed');
+      setEntryVouchers([]);
+      setExitVouchers([]);
     } catch {
       alert('Erreur lors de la réinitialisation');
     }
@@ -448,7 +475,14 @@ const Vouchers = () => {
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 text-sm font-medium"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Tout supprimer
+                  Vider cette liste
+                </button>
+                <button
+                  onClick={resetAllBons}
+                  className="px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 transition-colors flex items-center gap-2 text-sm font-medium"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Réinitialiser tous les bons
                 </button>
                 <button
                   onClick={() => setIsAdminMode(false)}
@@ -574,6 +608,12 @@ const Vouchers = () => {
                           </span>
                         </div>
                       </div>
+
+                      {voucherData.destination && (
+                        <div className="mt-3 text-sm text-slate-600">
+                          <span className="font-medium text-slate-700">Destination:</span> {voucherData.destination}
+                        </div>
+                      )}
 
                       {voucherData.notes && (
                         <div className="mt-3 text-sm text-slate-600">
@@ -730,6 +770,12 @@ const Vouchers = () => {
                       <div className="flex justify-between">
                         <span className="text-slate-600">Pris par:</span>
                         <span className="font-medium">{modalTakenByName}</span>
+                      </div>
+                    )}
+                    {selectedVoucher.destination && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Destination:</span>
+                        <span className="font-medium text-right max-w-[220px]">{selectedVoucher.destination}</span>
                       </div>
                     )}
                   </div>

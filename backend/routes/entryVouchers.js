@@ -152,7 +152,15 @@ router.post('/', async (req, res) => {
     if (!handled_by) {
       return res.status(400).json({ error: 'Handled by is required' });
     }
-    
+
+    // Voucher numbers must be unique — block duplicates so each bon is one-of-a-kind.
+    if (voucher_number) {
+      const dup = await getRow('SELECT entry_id FROM entryVouchers WHERE voucher_number = ?', [voucher_number]);
+      if (dup) {
+        return res.status(400).json({ error: `Le bon ${voucher_number} existe déjà. Chaque numéro de bon doit être unique.` });
+      }
+    }
+
     // Look up the user ID from the username
     const handledByUser = await getRow('SELECT user_id FROM users WHERE username = ?', [handled_by]);
     if (!handledByUser) {

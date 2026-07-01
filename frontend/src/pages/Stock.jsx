@@ -108,15 +108,26 @@ const Stock = () => {
     }
   };
 
-  // Verify PIN and enable edit mode
-  const verifyPin = () => {
+  // Verify PIN (against the admin code stored on the server) and enable edit mode
+  const verifyPin = async () => {
     const enteredPin = pinCode.join('');
-    if (enteredPin === '3739') {
-      setIsEditMode(true);
-      setShowPinModal(false);
-      setPinCode(['', '', '', '']);
-    } else {
-      alert('Code PIN incorrect');
+    try {
+      const res = await fetch('/api/settings/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: enteredPin })
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setIsEditMode(true);
+        setShowPinModal(false);
+        setPinCode(['', '', '', '']);
+      } else {
+        alert('Code PIN incorrect');
+        setPinCode(['', '', '', '']);
+      }
+    } catch {
+      alert('Erreur de vérification du code');
       setPinCode(['', '', '', '']);
     }
   };
@@ -421,7 +432,9 @@ const Stock = () => {
                 <input
                   type="number"
                   min="0"
+                  placeholder="0"
                   value={editingItems[item.item_id].quantity || ''}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setEditingItems(prev => ({
                     ...prev,
                     [item.item_id]: {
@@ -696,7 +709,7 @@ const Stock = () => {
                 <input
                   key={index}
                   id={`pin-${index}`}
-                  type="text"
+                  type="password"
                   inputMode="numeric"
                   maxLength="1"
                   value={pinCode[index]}
@@ -768,7 +781,9 @@ const Stock = () => {
                   <input
                     type="number"
                     min="0"
-                    value={newItem.quantity}
+                    value={newItem.quantity || ''}
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setNewItem(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
