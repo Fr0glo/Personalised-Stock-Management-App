@@ -6,6 +6,7 @@ const SYSTEM_ROLES = ['superadmin', 'security', 'depot'];
 
 const Comptes = () => {
   const [users, setUsers] = useState([]);
+  const [maxUsers, setMaxUsers] = useState(0); // 0 = unlimited
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -39,13 +40,22 @@ const Comptes = () => {
     }
   };
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => {
+    loadUsers();
+    fetch('/api/settings/limits').then(r => r.ok ? r.json() : null).then(d => { if (d) setMaxUsers(d.max_users || 0); }).catch(() => {});
+  }, []);
 
   if (me && me.role !== 'superadmin') return <Navigate to="/" replace />;
+
+  const atLimit = maxUsers > 0 && users.length >= maxUsers;
 
   const addUser = async () => {
     if (!newUser.username.trim() || !newUser.password) {
       alert("Nom d'utilisateur et mot de passe requis");
+      return;
+    }
+    if (atLimit) {
+      alert(`Limite atteinte : ${maxUsers} compte(s) maximum pour votre formule. Contactez votre fournisseur pour en ajouter.`);
       return;
     }
     try {
@@ -146,7 +156,14 @@ const Comptes = () => {
 
       {/* Office users */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h2 className="text-lg font-semibold text-slate-800 mb-4">Utilisateurs (bureau)</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-800">Utilisateurs (bureau)</h2>
+          {maxUsers > 0 && (
+            <span className={`text-sm font-medium ${atLimit ? 'text-red-600' : 'text-slate-500'}`}>
+              {users.length} / {maxUsers} comptes
+            </span>
+          )}
+        </div>
 
         {/* Add */}
         <div className="flex flex-col sm:flex-row gap-2 mb-5">
@@ -162,7 +179,7 @@ const Comptes = () => {
             placeholder="Mot de passe"
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <button onClick={addUser} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2">
+          <button onClick={addUser} disabled={atLimit} title={atLimit ? 'Limite de comptes atteinte' : ''} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-2">
             <UserPlus className="h-4 w-4" /> Ajouter
           </button>
         </div>

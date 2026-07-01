@@ -21,6 +21,12 @@ const ensureSettings = async () => {
   if (!row) {
     await runQuery("INSERT INTO settings (key, value) VALUES ('admin_pin', ?)", [DEFAULT_ADMIN_PIN]);
   }
+  // Max office logins for this install (0 = unlimited). The seller sets it when
+  // provisioning a client; the client can't raise it themselves.
+  const lim = await getRow("SELECT value FROM settings WHERE key = 'max_users'");
+  if (!lim) {
+    await runQuery("INSERT INTO settings (key, value) VALUES ('max_users', '0')");
+  }
   settingsEnsured = true;
 };
 
@@ -56,6 +62,31 @@ router.put('/admin-pin', async (req, res) => {
   } catch (error) {
     console.error('Error updating admin PIN:', error);
     res.status(500).json({ error: 'Failed to update admin PIN' });
+  }
+});
+
+// GET /api/settings/limits -> { max_users } (0 = unlimited)
+router.get('/limits', async (req, res) => {
+  try {
+    await ensureSettings();
+    const row = await getRow("SELECT value FROM settings WHERE key = 'max_users'");
+    res.json({ max_users: Number(row?.value) || 0 });
+  } catch (error) {
+    console.error('Error fetching limits:', error);
+    res.status(500).json({ error: 'Failed to fetch limits' });
+  }
+});
+
+// PUT /api/settings/limits { max_users } -> set the office-login cap (provisioning)
+router.put('/limits', async (req, res) => {
+  try {
+    await ensureSettings();
+    const n = Math.max(0, parseInt(req.body?.max_users, 10) || 0);
+    await runQuery("UPDATE settings SET value = ? WHERE key = 'max_users'", [String(n)]);
+    res.json({ max_users: n });
+  } catch (error) {
+    console.error('Error updating limits:', error);
+    res.status(500).json({ error: 'Failed to update limits' });
   }
 });
 
