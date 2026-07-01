@@ -1,36 +1,34 @@
 import { jsPDF } from 'jspdf';
+import { getCompany } from '../hooks/useCompany';
 
-// Brand colours (RGB)
-const NAVY = [20, 36, 107];
-const SOFT = [77, 87, 140];
-const ORANGE = [241, 88, 26];
+// Fixed neutral accents; the primary/accent colours come from company settings.
 const CYAN = [22, 179, 219];
+const SOFT = [77, 87, 140];
 const GRID = [219, 219, 224];
 const MUTED = [158, 158, 168];
 const ZEBRA = [247, 247, 250];
 const WHITE = [255, 255, 255];
 
-// Load the logo as a data URL (best-effort — the PDF still renders without it).
-const loadLogo = async () => {
-  try {
-    const res = await fetch('/btp_logo_icon_512_transparent.png');
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return await new Promise((resolve) => {
-      const r = new FileReader();
-      r.onloadend = () => resolve(r.result);
-      r.onerror = () => resolve(null);
-      r.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
+const hexToRgb = (hex, fallback) => {
+  if (typeof hex !== 'string') return fallback;
+  const m = hex.replace('#', '').match(/^([0-9a-f]{6})$/i);
+  if (!m) return fallback;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 
 const fmtDate = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 const fmtHeure = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 export const generateBonCommandePdf = async ({ numero, demande_par, created_at, items }) => {
+  const company = await getCompany();
+  const NAVY = hexToRgb(company.color_primary, [20, 36, 107]);
+  const ORANGE = hexToRgb(company.color_accent, [241, 88, 26]);
+  const name = company.company_name || 'Entreprise';
+  const tagline = company.tagline || '';
+  const logo = company.logo || null;
+  const template = company.bon_template || 'classic';
+
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const PW = doc.internal.pageSize.getWidth();
   const PH = doc.internal.pageSize.getHeight();
@@ -40,7 +38,6 @@ export const generateBonCommandePdf = async ({ numero, demande_par, created_at, 
   const when = created_at ? new Date(created_at) : new Date();
   const dateStr = fmtDate(when);
   const heureStr = fmtHeure(when);
-  const logo = await loadLogo();
 
   const cols = [
     { label: 'N°', w: 30, align: 'center' },
@@ -62,6 +59,7 @@ export const generateBonCommandePdf = async ({ numero, demande_par, created_at, 
   const fill = (c) => doc.setFillColor(c[0], c[1], c[2]);
   const text = (c) => doc.setTextColor(c[0], c[1], c[2]);
   const draw = (c) => doc.setDrawColor(c[0], c[1], c[2]);
+  const dot = '………………………';
 
   for (let p = 0; p < pages; p++) {
     if (p > 0) doc.addPage();
@@ -69,41 +67,49 @@ export const generateBonCommandePdf = async ({ numero, demande_par, created_at, 
 
     // ---- Header: logo + wordmark + company contact ----
     if (logo) {
-      try { doc.addImage(logo, 'PNG', M, y, 40, 40); } catch { /* ignore */ }
+      try { doc.addImage(logo, M, y, 40, 40); } catch { /* ignore a bad logo */ }
     }
-    doc.setFont('helvetica', 'bold'); text(NAVY); doc.setFontSize(20);
-    doc.text('BTP OULIME', M + 48, y + 22);
-    doc.setFont('helvetica', 'normal'); text(SOFT); doc.setFontSize(7);
-    doc.text('B Â T I M E N T   &   T R A V A U X   P U B L I C S', M + 49, y + 33);
+    doc.setFont('helvetica', 'bold'); text(NAVY); doc.setFontSize(18);
+    doc.text(name, M + (logo ? 48 : 0), y + 20, { maxWidth: 300 });
+    if (tagline) {
+      doc.setFont('helvetica', 'normal'); text(MUTED); doc.setFontSize(7);
+      doc.text(tagline.toUpperCase(), M + (logo ? 49 : 1), y + 32);
+    }
 
     doc.setFontSize(8); text(SOFT);
     const rx = PW - M;
-    doc.text('Adresse : ………………………………', rx, y + 8, { align: 'right' });
-    doc.text('Tél : ……………   ICE : ……………', rx, y + 20, { align: 'right' });
-    doc.text('Email : ………………………………', rx, y + 32, { align: 'right' });
+    doc.text(`Adresse : ${company.address || dot}`, rx, y + 8, { align: 'right' });
+    doc.text(`Tél : ${company.phone || '……………'}    ICE : ${company.ice || '……………'}`, rx, y + 20, { align: 'right' });
+    doc.text(`Email : ${company.email || dot}`, rx, y + 32, { align: 'right' });
 
     y += 56;
 
-    // ---- Title bar ----
+    // ---- Title bar (varies by template) ----
     const barH = 34;
-    fill(NAVY); doc.rect(M, y, contentW, barH, 'F');
-    // cyan checkbox chip with check
-    draw(CYAN); doc.setLineWidth(1.5);
-    doc.roundedRect(M + 12, y + (barH - 16) / 2, 16, 16, 3, 3, 'S');
-    doc.line(M + 16, y + barH / 2 + 1, M + 19, y + barH / 2 + 4);
-    doc.line(M + 19, y + barH / 2 + 4, M + 24, y + barH / 2 - 3);
-    // title
-    doc.setFont('helvetica', 'bold'); text(WHITE); doc.setFontSize(18);
-    doc.text('BON DE COMMANDE', M + 40, y + barH / 2 + 6);
-    // N° + numero (orange mono)
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); text(WHITE);
-    doc.text('N°', tableRight - 100, y + barH / 2 + 4);
-    doc.setFont('courier', 'bold'); text(ORANGE); doc.setFontSize(16);
-    doc.text(numero || 'BC-0000', tableRight - 10, y + barH / 2 + 5, { align: 'right' });
+    if (template === 'epure') {
+      doc.setFont('helvetica', 'bold'); text(NAVY); doc.setFontSize(20);
+      doc.text('BON DE COMMANDE', M, y + 20);
+      doc.setFont('courier', 'bold'); text(ORANGE); doc.setFontSize(16);
+      doc.text(numero || 'BC-0000', tableRight, y + 20, { align: 'right' });
+      draw(ORANGE); doc.setLineWidth(2);
+      doc.line(M, y + 30, tableRight, y + 30);
+    } else {
+      fill(NAVY); doc.rect(M, y, contentW, barH, 'F');
+      draw(CYAN); doc.setLineWidth(1.5);
+      doc.roundedRect(M + 12, y + (barH - 16) / 2, 16, 16, 3, 3, 'S');
+      doc.line(M + 16, y + barH / 2 + 1, M + 19, y + barH / 2 + 4);
+      doc.line(M + 19, y + barH / 2 + 4, M + 24, y + barH / 2 - 3);
+      doc.setFont('helvetica', 'bold'); text(WHITE); doc.setFontSize(18);
+      doc.text('BON DE COMMANDE', M + 40, y + barH / 2 + 6);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11); text(WHITE);
+      doc.text('N°', tableRight - 100, y + barH / 2 + 4);
+      doc.setFont('courier', 'bold'); text(ORANGE); doc.setFontSize(16);
+      doc.text(numero || 'BC-0000', tableRight - 10, y + barH / 2 + 5, { align: 'right' });
+    }
 
     y += barH + 20;
 
-    // ---- Header line: Demandé par / Date / Heure (auto-filled) ----
+    // ---- Header line: Demandé par / Date / Heure ----
     doc.setFontSize(9);
     const pair = (label, value, x) => {
       doc.setFont('helvetica', 'normal'); text(SOFT);
@@ -135,7 +141,6 @@ export const generateBonCommandePdf = async ({ numero, demande_par, created_at, 
       const item = list[idx];
       const top = bodyTop + r * ROW_H;
       if (r % 2 === 1) { fill(ZEBRA); doc.rect(M, top, contentW, ROW_H, 'F'); }
-      // N°
       doc.setFont('courier', 'normal'); text(MUTED); doc.setFontSize(9);
       doc.text(String(idx + 1).padStart(2, '0'), colX[0] + cols[0].w / 2, top + ROW_H / 2 + 3, { align: 'center' });
       if (item) {
@@ -150,13 +155,11 @@ export const generateBonCommandePdf = async ({ numero, demande_par, created_at, 
         doc.text(String(item.qte ?? ''), colX[2] + cols[2].w / 2, top + ROW_H / 2 + 3, { align: 'center' });
         doc.text(String(item.unite ?? ''), colX[3] + cols[3].w / 2, top + ROW_H / 2 + 3, { align: 'center' });
       }
-      // PRÉPARÉ checkbox in every row
       draw(GRID); doc.setLineWidth(1);
       doc.roundedRect(colX[4] + cols[4].w / 2 - 8, top + ROW_H / 2 - 8, 16, 16, 2, 2, 'S');
     }
     const bodyBottom = bodyTop + ROWS_PER_PAGE * ROW_H;
 
-    // ---- Grid + border ----
     draw(GRID); doc.setLineWidth(0.5);
     [colX[1], colX[2], colX[3], colX[4]].forEach((vx) => doc.line(vx, y, vx, bodyBottom));
     for (let r = 1; r < ROWS_PER_PAGE; r++) doc.line(M, bodyTop + r * ROW_H, tableRight, bodyTop + r * ROW_H);
@@ -182,7 +185,7 @@ export const generateBonCommandePdf = async ({ numero, demande_par, created_at, 
     draw(CYAN); doc.setLineWidth(1);
     doc.line(M, footY - 14, tableRight, footY - 14);
     doc.setFont('helvetica', 'normal'); text(SOFT); doc.setFontSize(8);
-    doc.text('BTP OULIME — Bâtiment & Travaux Publics', M, footY - 3);
+    doc.text(`${name}${tagline ? ' — ' + tagline : ''}`, M, footY - 3);
     doc.text(`Bon de commande interne — liste des articles à préparer.    Page ${p + 1}/${pages}`, tableRight, footY - 3, { align: 'right' });
   }
 

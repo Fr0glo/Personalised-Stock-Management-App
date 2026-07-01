@@ -129,6 +129,20 @@ const Entreprise = () => {
               <input type="color" value={form.color_accent} onChange={(e) => set('color_accent', e.target.value)} className="w-12 h-8 rounded border border-slate-300" />
             </div>
           </div>
+
+          <div className="mt-5">
+            <span className="text-sm text-slate-600 block mb-2">Modèle de bon</span>
+            <div className="flex gap-2">
+              {[['classic', 'Classique'], ['epure', 'Épuré']].map(([val, lbl]) => (
+                <button
+                  key={val} onClick={() => set('bon_template', val)}
+                  className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-colors ${form.bon_template === val ? 'border-navy-700 bg-navy-50 text-navy-700 font-medium' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Company info */}

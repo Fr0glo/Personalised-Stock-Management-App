@@ -13,9 +13,11 @@ import {
   UserCog,
   Building2
 } from 'lucide-react';
+import { useCompany } from '../hooks/useCompany';
 
 const Sidebar = () => {
   const location = useLocation();
+  const company = useCompany();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const userMenuRef = useRef(null);
@@ -76,12 +78,16 @@ const Sidebar = () => {
       {/* Logo */}
       <div className="p-6 border-b border-navy-600">
         <div className="flex items-center space-x-3">
-          <img src="/btp_logo_icon_512_transparent.png" alt="BTP Oulime" className="w-14 h-14 object-contain" />
+          {company?.logo
+            ? <img src={company.logo} alt="Logo" className="w-14 h-14 object-contain" />
+            : <div className="w-14 h-14 rounded-lg bg-navy-600 flex items-center justify-center"><Building2 className="w-7 h-7 text-navy-200" /></div>}
           <div>
-            <h1 className="text-lg font-display font-bold text-white tracking-wide">
-              BTP OULIME
+            <h1 className="text-lg font-display font-bold text-white tracking-wide truncate max-w-[150px]">
+              {company?.company_name || 'Gestion de Stock'}
             </h1>
-            <p className="text-[10px] text-navy-300 tracking-widest uppercase">Gestion de Stock</p>
+            <p className="text-[10px] text-navy-300 tracking-widest uppercase truncate max-w-[150px]">
+              {company?.tagline || 'Gestion de Stock'}
+            </p>
           </div>
         </div>
       </div>

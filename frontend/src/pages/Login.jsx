@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, User, Lock } from 'lucide-react';
+import { LogIn, User, Lock, Building2 } from 'lucide-react';
+import { useCompany } from '../hooks/useCompany';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -8,6 +9,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const company = useCompany();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -52,9 +54,11 @@ const Login = () => {
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md border border-brand-cream-dark">
         {/* Logo/Header */}
         <div className="text-center mb-8">
-          <img src="/btp_logo_icon_512_transparent.png" alt="BTP Oulime" className="w-24 h-24 object-contain mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-navy-700">BTP OULIME</h1>
-          <p className="text-xs text-navy-400 tracking-widest uppercase mt-1">Gestion de Stock</p>
+          {company?.logo
+            ? <img src={company.logo} alt="Logo" className="w-24 h-24 object-contain mx-auto mb-4" />
+            : <div className="w-24 h-24 rounded-xl bg-navy-50 flex items-center justify-center mx-auto mb-4"><Building2 className="w-12 h-12 text-navy-300" /></div>}
+          <h1 className="text-2xl font-bold text-navy-700">{company?.company_name || 'Gestion de Stock'}</h1>
+          {company?.tagline && <p className="text-xs text-navy-400 tracking-widest uppercase mt-1">{company.tagline}</p>}
           <p className="text-slate-500 mt-3">Connexion au système</p>
         </div>
 
