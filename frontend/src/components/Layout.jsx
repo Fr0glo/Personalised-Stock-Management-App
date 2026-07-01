@@ -1,10 +1,14 @@
 import React from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import SetupWizard from './SetupWizard';
 
 const Layout = ({ children }) => {
   return (
     <div className="flex h-screen bg-slate-50">
+      {/* First-run onboarding (admin only, until the company is configured) */}
+      <SetupWizard />
+
       {/* Sidebar */}
       <Sidebar />
       
