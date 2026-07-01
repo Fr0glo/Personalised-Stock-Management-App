@@ -79,7 +79,7 @@ const Sidebar = () => {
             <h1 className="text-lg font-display font-bold text-white tracking-wide">
               BTP OULIME
             </h1>
-            <p className="text-[10px] text-navy-300 tracking-widest uppercase">Gestion de Stock</p>
+            <p className="text-[10px] text-navy-300 tracking-widest uppercase">Gestion de Stock · v1.1</p>
           </div>
         </div>
       </div>
