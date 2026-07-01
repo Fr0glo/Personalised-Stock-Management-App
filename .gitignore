@@ -2,10 +2,10 @@
 node_modules/
 package-lock.json
 
-# Database
-backend/database/*.db
-backend/database/*.db-shm
-backend/database/*.db-wal
+# Database (any SQLite file, anywhere)
+*.db
+*.db-shm
+*.db-wal
 backend/database/backups/
 backend/database/archives/
 
