@@ -21,6 +21,7 @@ import orderRoutes from './routes/orders.js';
 import analyticsRoutes from './routes/analytics.js';
 import settingsRoutes from './routes/settings.js';
 import bonCommandeRoutes from './routes/bonCommande.js';
+import companyRoutes from './routes/company.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,8 +43,8 @@ const limiter = rateLimit({
 // Set up middleware for all requests
 app.use('/api/', limiter); // Apply rate limiting to API routes
 app.use(cors()); // Allow frontend to connect to the API
-app.use(express.json()); // Parse incoming JSON data
-app.use(express.urlencoded({ extended: true })); // Parse form data
+app.use(express.json({ limit: '5mb' })); // Parse incoming JSON data (roomy enough for a base64 logo)
+app.use(express.urlencoded({ extended: true, limit: '5mb' })); // Parse form data
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -60,6 +61,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/bon-commande', bonCommandeRoutes);
+app.use('/api/company', companyRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
