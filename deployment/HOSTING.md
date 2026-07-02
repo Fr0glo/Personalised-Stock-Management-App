@@ -22,7 +22,10 @@ one process.
 
 ## One-time server setup
 
-1. A cheap VPS (Hetzner / OVH / Contabo), Ubuntu, ~$5–8/mo.
+1. A cheap VPS, Ubuntu 22.04+. **DigitalOcean** is a good pick if you have the
+   GitHub Education **$200 credit** (covers ~year 1 free). Create a **Basic
+   Droplet, 2 GB RAM ($12/mo)** — enough for Caddy + several client node
+   processes + the frontend build. (Hetzner / OVH / Contabo work identically.)
 2. A domain, with a **wildcard DNS A-record**: `*.votre-domaine.com` → the VPS IP
    (and `votre-domaine.com` → the VPS IP for the main site).
 3. Install once:
@@ -50,9 +53,9 @@ From `backend/`:
 ```bash
 npm run provision-client acme 4001
 ```
-That creates `clients/acme.db` (empty, migrated) and prints the two commands to finish:
+That creates `database/clients/acme.db` (empty, migrated) and prints the two commands to finish:
 ```bash
-DB_PATH="/opt/stock/backend/clients/acme.db" PORT=4001 pm2 start server.js --name acme
+DB_PATH="/opt/stock/backend/database/clients/acme.db" PORT=4001 pm2 start server.js --name acme
 pm2 save
 ```
 Then add the printed block to the `Caddyfile` and `caddy reload`. Pick the next
@@ -71,15 +74,29 @@ cd backend && npm install --production && cd ..
 cd frontend && npm install && npm run build && cd ..
 pm2 restart all
 ```
-Migrations: run once per client DB, e.g. `for db in backend/clients/*.db; do DB_PATH="$PWD/$db" node backend/database/migrate.js up; done`.
+Migrations: run once per client DB, e.g. `for db in backend/database/clients/*.db; do DB_PATH="$PWD/$db" node backend/database/migrate.js up; done`.
 
 ## Backups
 
-Each client DB is a single file in `backend/clients/`. Nightly, gzip them and
-copy off-site (e.g. Backblaze B2). One line backs them all up:
+Each client DB is a single file in `backend/database/clients/`. Because it's all
+one disk, **off-site backups are non-negotiable.** Use the ready-made script:
+
 ```bash
-for db in backend/clients/*.db; do gzip -c "$db" > "/backups/$(basename $db)-$(date +%F).gz"; done
+sudo apt install -y sqlite3                       # safe hot-snapshot command
+# optional but recommended — off-site copy via rclone (Azure Blob / Backblaze):
+curl https://rclone.org/install.sh | sudo bash
+rclone config                                     # make a remote, e.g. "offsite"
+
+# nightly at 02:15 (crontab -e):
+15 2 * * *  RCLONE_REMOTE="offsite:stock-backups" /opt/stock/deployment/backup-clients.sh >> /var/log/stock-backup.log 2>&1
 ```
+
+`deployment/backup-clients.sh` makes a WAL-safe snapshot of every client DB,
+gzips it, keeps the last 7 days locally, and (if `RCLONE_REMOTE` is set) pushes
+the lot off-site. With the GitHub Education **Azure $100 credit**, an **Azure
+Blob** remote gives you backups on a *different provider* than the app — so a
+DigitalOcean outage can't take your backups with it. Also turn on DigitalOcean's
+automated **Droplet snapshots** (~$1/mo) for whole-server restore.
 
 ## Notes
 - **`DB_PATH`** + **`PORT`** are the only per-client settings; the code is identical.
