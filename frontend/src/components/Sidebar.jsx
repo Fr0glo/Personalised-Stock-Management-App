@@ -63,12 +63,11 @@ const Sidebar = () => {
     { path: '/bon-commande/historique', label: 'Historique commandes', icon: Clock },
     { path: '/vouchers', label: 'Les bons', icon: FileText },
     { path: '/personnel', label: 'Personnel', icon: Users },
-    // Admin-only pages
-    ...(currentUser?.role === 'superadmin'
+    // Admin-only pages (client admin + platform owner)
+    ...(['superadmin', 'owner'].includes(currentUser?.role)
       ? [
           { path: '/analyse', label: 'Analyse', icon: BarChart3 },
           { path: '/comptes', label: 'Comptes', icon: UserCog },
-          { path: '/entreprise', label: 'Entreprise', icon: Building2 },
         ]
       : []),
   ];

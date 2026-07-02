@@ -33,7 +33,7 @@ const Login = () => {
 
         if (data.user.role === 'security') {
           navigate('/security');
-        } else if (data.user.role === 'superadmin') {
+        } else if (data.user.role === 'superadmin' || data.user.role === 'owner') {
           navigate('/analyse');
         } else {
           navigate('/');

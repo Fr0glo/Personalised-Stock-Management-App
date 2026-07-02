@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { UserPlus, Save, Trash2, Edit, X, KeyRound, Shield } from 'lucide-react';
 
-const SYSTEM_ROLES = ['superadmin', 'security', 'depot'];
+const SYSTEM_ROLES = ['superadmin', 'owner', 'security', 'depot'];
 
 const Comptes = () => {
   const [users, setUsers] = useState([]);
@@ -22,6 +22,7 @@ const Comptes = () => {
   const [confirmPin, setConfirmPin] = useState('');
 
   const me = (() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } })();
+  const isOwner = me?.role === 'owner';
 
   const loadUsers = async () => {
     try {
@@ -30,8 +31,11 @@ const Comptes = () => {
       const res = await fetch('/api/users');
       if (!res.ok) throw new Error('Échec du chargement');
       const all = await res.json();
-      // Office staff = everyone except the system accounts (admin, security, depot)
-      setUsers(all.filter(u => !SYSTEM_ROLES.includes(u.role)));
+      // Client admin sees only the office accounts. The owner also sees the
+      // client's admin account (to hand over / reset its credentials).
+      setUsers(all.filter(u => isOwner
+        ? !['owner', 'security', 'depot'].includes(u.role)
+        : !SYSTEM_ROLES.includes(u.role)));
     } catch (err) {
       console.error('Comptes load error:', err);
       setError('Impossible de charger les comptes.');
@@ -43,11 +47,28 @@ const Comptes = () => {
   useEffect(() => {
     loadUsers();
     fetch('/api/settings/limits').then(r => r.ok ? r.json() : null).then(d => { if (d) setMaxUsers(d.max_users || 0); }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (me && me.role !== 'superadmin') return <Navigate to="/" replace />;
+  if (me && !['superadmin', 'owner'].includes(me.role)) return <Navigate to="/" replace />;
 
-  const atLimit = maxUsers > 0 && users.length >= maxUsers;
+  const saveLimit = async () => {
+    try {
+      const res = await fetch('/api/settings/limits', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ max_users: maxUsers })
+      });
+      if (!res.ok) throw new Error('Échec');
+      alert('Limite de comptes mise à jour.');
+    } catch {
+      alert('Erreur lors de la mise à jour de la limite');
+    }
+  };
+
+  // Only office accounts count toward the client's limit (not the admin itself)
+  const officeCount = users.filter(u => !SYSTEM_ROLES.includes(u.role)).length;
+  const atLimit = maxUsers > 0 && officeCount >= maxUsers;
 
   const addUser = async () => {
     if (!newUser.username.trim() || !newUser.password) {
@@ -117,7 +138,7 @@ const Comptes = () => {
       const res = await fetch(`/api/users/${me.user_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: me.username, role: 'superadmin', password: adminPassword })
+        body: JSON.stringify({ username: me.username, role: me.role, password: adminPassword })
       });
       if (!res.ok) throw new Error('Échec');
       setAdminPassword('');
@@ -160,7 +181,7 @@ const Comptes = () => {
           <h2 className="text-lg font-semibold text-slate-800">Utilisateurs (bureau)</h2>
           {maxUsers > 0 && (
             <span className={`text-sm font-medium ${atLimit ? 'text-red-600' : 'text-slate-500'}`}>
-              {users.length} / {maxUsers} comptes
+              {officeCount} / {maxUsers} comptes
             </span>
           )}
         </div>
@@ -217,7 +238,12 @@ const Comptes = () => {
                   </>
                 ) : (
                   <>
-                    <span className="flex-1 font-medium text-slate-800">{u.username}</span>
+                    <span className="flex-1 font-medium text-slate-800">
+                      {u.username}
+                      {u.role === 'superadmin' && (
+                        <span className="ml-2 px-1.5 py-0.5 bg-navy-50 text-navy-700 text-xs font-medium rounded">Admin client</span>
+                      )}
+                    </span>
                     <button onClick={() => startEdit(u)} className="p-1.5 text-blue-600 hover:text-blue-800" title="Modifier">
                       <Edit className="h-4 w-4" />
                     </button>
@@ -276,6 +302,32 @@ const Comptes = () => {
           </div>
         </div>
       </div>
+
+      {/* Owner-only: the client's account limit (their plan) */}
+      {isOwner && (
+        <div className="bg-white rounded-xl shadow-sm border-2 border-navy-100 p-6">
+          <h2 className="text-lg font-semibold text-slate-800 mb-1 flex items-center gap-2">
+            <Shield className="h-5 w-5 text-navy-700" /> Formule client (super admin)
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">
+            Nombre maximum de comptes bureau que ce client peut créer. 0 = illimité.
+            Visible uniquement par vous.
+          </p>
+          <div className="flex gap-2 items-center">
+            <input
+              type="number" min="0" value={maxUsers || ''}
+              placeholder="0"
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setMaxUsers(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-28 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-sm text-slate-500">comptes max</span>
+            <button onClick={saveLimit} className="ml-auto px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800">
+              Enregistrer la limite
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

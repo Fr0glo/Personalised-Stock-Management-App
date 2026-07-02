@@ -13,7 +13,6 @@ import Vouchers from './pages/Vouchers';
 import Personnel from './pages/Personnel';
 import Analyse from './pages/Analyse';
 import Comptes from './pages/Comptes';
-import Entreprise from './pages/Entreprise';
 import Security from './pages/Security';
 import BonEntree from './pages/BonEntree';
 import BonSortie from './pages/BonSortie';
@@ -90,7 +89,6 @@ function App() {
                   <Route path="/personnel" element={<Personnel />} />
                   <Route path="/analyse" element={<Analyse />} />
                   <Route path="/comptes" element={<Comptes />} />
-                  <Route path="/entreprise" element={<Entreprise />} />
                   <Route path="/bon-entree" element={<BonEntree />} />
                   <Route path="/bon-sortie" element={<BonSortie />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

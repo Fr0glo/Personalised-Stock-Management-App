@@ -118,8 +118,8 @@ const SetupWizard = () => {
           </div>
         </div>
 
-        <div className="p-6 border-t border-slate-200 flex items-center justify-between">
-          <button onClick={() => setShow(false)} className="text-sm text-slate-500 hover:text-slate-700">Plus tard</button>
+        <div className="p-6 border-t border-slate-200 flex items-center justify-end">
+          {/* No "later" — the company must be configured before using the app */}
           <button
             onClick={finish} disabled={saving}
             className="px-5 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 disabled:opacity-50 font-medium"

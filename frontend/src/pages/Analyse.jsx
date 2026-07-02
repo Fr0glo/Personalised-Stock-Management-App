@@ -91,8 +91,8 @@ const Analyse = () => {
     }
   };
 
-  // Admin-only page
-  if (user && user.role !== 'superadmin') return <Navigate to="/" replace />;
+  // Admin-only page (client admin + platform owner)
+  if (user && !['superadmin', 'owner'].includes(user.role)) return <Navigate to="/" replace />;
 
   if (isLoading) {
     return (
