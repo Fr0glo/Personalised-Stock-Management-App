@@ -57,7 +57,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     await ensureUsersSchema();
-    const { username, role, password } = req.body;
+    const { username, role, password, created_by } = req.body;
 
     if (!username) {
       return res.status(400).json({ error: 'Username is required' });
@@ -66,9 +66,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Password is required' });
     }
 
+    // A freshly created admin goes through the company wizard on first login
+    const firstLogin = role === 'superadmin' ? 1 : 0;
+
     const result = await runQuery(
-      'INSERT INTO users (username, role, password) VALUES (?, ?, ?)',
-      [username.trim(), role || 'office', password]
+      'INSERT INTO users (username, role, password, created_by, first_login) VALUES (?, ?, ?, ?, ?)',
+      [username.trim(), role || 'office', password, created_by || null, firstLogin]
     );
 
     const createdUser = await getRow('SELECT user_id, username, role FROM users WHERE user_id = ?', [result.id]);
@@ -87,7 +90,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     await ensureUsersSchema();
-    const { username, role, password } = req.body;
+    const { username, role, password, max_users, first_login } = req.body;
 
     if (!username) {
       return res.status(400).json({ error: 'Username is required' });
@@ -98,12 +101,17 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Promoting a user to admin sends them through the company wizard once
+    const promotedToAdmin = role === 'superadmin' && existing.role !== 'superadmin';
+
     await runQuery(
-      'UPDATE users SET username = ?, role = ?, password = ? WHERE user_id = ?',
+      'UPDATE users SET username = ?, role = ?, password = ?, max_users = ?, first_login = ? WHERE user_id = ?',
       [
         username.trim(),
         role !== undefined ? role : existing.role,
         (password !== undefined && password !== '') ? password : existing.password,
+        max_users !== undefined ? Math.max(0, parseInt(max_users, 10) || 0) : (existing.max_users || 0),
+        first_login !== undefined ? (first_login ? 1 : 0) : (promotedToAdmin ? 1 : (existing.first_login || 0)),
         req.params.id
       ]
     );

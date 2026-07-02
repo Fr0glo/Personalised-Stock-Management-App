@@ -39,9 +39,11 @@ const wipe = async () => {
 
   // Office logins created by the previous client (system accounts stay)
   await run("DELETE FROM users WHERE role NOT IN ('superadmin', 'owner', 'security', 'depot')");
+  // Extra admin accounts too — keep only the canonical client admin (9996)
+  await run("DELETE FROM users WHERE role = 'superadmin' AND user_id != 9996");
 
   // Fresh admin credentials for the new client
-  await run("UPDATE users SET username = 'admin', password = 'admin123' WHERE role = 'superadmin'");
+  await run("UPDATE users SET username = 'admin', password = 'admin123', max_users = 0, first_login = 0 WHERE role = 'superadmin'");
 
   // Branding back to blank -> the setup wizard shows again on first login
   await run(`UPDATE companySettings SET

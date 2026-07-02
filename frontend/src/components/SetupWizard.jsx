@@ -20,10 +20,15 @@ const SetupWizard = () => {
         const res = await fetch('/api/company');
         if (!res.ok) return;
         const d = await res.json();
-        if (!d.setup_done) {
+        // Show when the company was never configured, OR on this admin's very
+        // first login (flag set when the owner created/promoted them).
+        if (!d.setup_done || me.first_login) {
+          // Prefill everything so re-running the wizard never wipes existing data
           setForm(f => ({
             ...f,
             company_name: d.company_name || '',
+            logo: d.logo || null,
+            tagline: d.tagline || '',
             color_primary: d.color_primary || f.color_primary,
             color_accent: d.color_accent || f.color_accent,
           }));
@@ -57,6 +62,17 @@ const SetupWizard = () => {
         body: JSON.stringify({ ...form, setup_done: 1 }),
       });
       if (!res.ok) throw new Error('Échec');
+      // This admin has done their first-login setup — don't show it again
+      if (me?.first_login) {
+        try {
+          await fetch(`/api/users/${me.user_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: me.username, first_login: 0 }),
+          });
+          localStorage.setItem('user', JSON.stringify({ ...me, first_login: 0 }));
+        } catch { /* non-blocking */ }
+      }
       setShow(false);
       window.location.reload(); // pick up the new branding everywhere
     } catch (e) {
