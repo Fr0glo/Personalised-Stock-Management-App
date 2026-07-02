@@ -198,8 +198,10 @@ const seedData = async () => {
           return;
         }
         
-        if (row.count > 0) {
-          console.log('Data already exists, skipping seed...');
+        // Product installs start EMPTY — the client adds their own stock,
+        // personnel and vouchers. (The admin account comes from migrations.)
+        if (true) {
+          console.log('Clean install — no sample data seeded.');
           db.close((err) => {
             if (err) reject(err);
             else resolve();
@@ -317,14 +319,7 @@ const initDatabase = async () => {
     await seedData();
     console.log('Initial data seeded successfully');
     
-    console.log('Database initialization completed!');
-    console.log('\nSample data created:');
-    console.log('- 3 users (admin, staff1, staff2)');
-    console.log('- 3 workers (Ahmed, Mohammed, Ali)');
-    console.log('- 5 stock items (Ciment, Briques, Acier, Sable, Gravier)');
-    console.log('- 1 entry voucher with details');
-    console.log('- 1 exit voucher with details');
-    console.log('- 2 audit log entries');
+    console.log('Database initialization completed! (empty — ready for the client)');
   } catch (error) {
     console.error('Error initializing database:', error);
   }

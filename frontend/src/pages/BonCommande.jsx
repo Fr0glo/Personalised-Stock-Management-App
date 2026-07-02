@@ -40,8 +40,9 @@ const BonCommande = () => {
 
   const add = (s) => setOrder(prev => prev.some(o => o.item_id === s.item_id)
     ? prev
-    : [...prev, { item_id: s.item_id, article: s.item_name, qte: 0, unite: s.unit || 'U' }]);
-  const setQte = (id, qte) => setOrder(prev => prev.map(o => o.item_id === id ? { ...o, qte: Math.max(0, qte) } : o));
+    : [...prev, { item_id: s.item_id, article: s.item_name, qte: 0, unite: s.unit || 'U', dispo: s.quantity ?? 0 }]);
+  // Can't order more than what's available in stock.
+  const setQte = (id, qte) => setOrder(prev => prev.map(o => o.item_id === id ? { ...o, qte: Math.min(Math.max(0, qte), o.dispo) } : o));
   const remove = (id) => setOrder(prev => prev.filter(o => o.item_id !== id));
 
   const generate = async () => {
@@ -117,9 +118,10 @@ const BonCommande = () => {
                       <div className="flex items-center gap-1">
                         <button onClick={() => setQte(s.item_id, sel.qte - 1)} className="p-1 hover:bg-slate-100 rounded"><Minus className="h-4 w-4" /></button>
                         <input
-                          type="number" min="0" value={sel.qte || ''} placeholder="0"
+                          type="number" min="0" max={sel.dispo} value={sel.qte || ''} placeholder="0"
                           onFocus={(e) => e.target.select()}
                           onChange={(e) => setQte(s.item_id, parseInt(e.target.value) || 0)}
+                          title={`Maximum disponible : ${sel.dispo}`}
                           className="w-14 px-1 py-1 border border-slate-300 rounded text-center text-sm"
                         />
                         <button onClick={() => setQte(s.item_id, sel.qte + 1)} className="p-1 hover:bg-slate-100 rounded"><Plus className="h-4 w-4" /></button>
