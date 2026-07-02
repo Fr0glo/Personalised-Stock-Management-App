@@ -1,0 +1,26 @@
+# Caddyfile — subdomain-per-client hosting for the Stock Management product.
+#
+# Caddy automatically obtains + renews HTTPS certificates for every subdomain
+# listed here. Add one block per client (the `provision-client` script prints
+# the exact block to paste), then run:  caddy reload
+#
+# DNS: a wildcard  *.votre-domaine.com  A-record must point at this server, so
+# every client subdomain resolves here.
+
+# --- Main domain: landing page / owner instance ---
+votre-domaine.com, www.votre-domaine.com {
+    reverse_proxy localhost:4000
+}
+
+# --- One block per client (each = its own instance + database) ---
+acme.votre-domaine.com {
+    reverse_proxy localhost:4001
+}
+
+# beta.votre-domaine.com {
+#     reverse_proxy localhost:4002
+# }
+
+# demo.votre-domaine.com {
+#     reverse_proxy localhost:4003
+# }

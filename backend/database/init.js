@@ -5,7 +5,8 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const dbPath = join(__dirname, 'stock_management.db');
+// Honour DB_PATH so a new client instance is initialised on its own database.
+const dbPath = process.env.DB_PATH || join(__dirname, 'stock_management.db');
 const db = new sqlite3.Database(dbPath);
 
 // Create tables
@@ -53,15 +54,6 @@ const createTables = () => {
       `);
       db.run(`
         CREATE INDEX IF NOT EXISTS idx_stockItems_quantity ON stockItems(quantity)
-      `);
-      db.run(`
-        CREATE INDEX IF NOT EXISTS idx_productCatalog_item_name ON productCatalog(item_name)
-      `);
-      db.run(`
-        CREATE INDEX IF NOT EXISTS idx_entryVouchers_date ON entryVouchers(date)
-      `);
-      db.run(`
-        CREATE INDEX IF NOT EXISTS idx_exitVouchers_date ON exitVouchers(date)
       `);
 
       // ProductCatalog table (master list of products used for Bon d'entrée search)
@@ -169,6 +161,11 @@ const createTables = () => {
           FOREIGN KEY (order_id) REFERENCES orders (order_id)
         )
       `);
+
+      // Indexes — created here, after their tables exist
+      db.run(`CREATE INDEX IF NOT EXISTS idx_productCatalog_item_name ON productCatalog(item_name)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_entryVouchers_date ON entryVouchers(date)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_exitVouchers_date ON exitVouchers(date)`);
 
       db.run('PRAGMA foreign_keys = ON');
     });

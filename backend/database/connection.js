@@ -5,7 +5,9 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const dbPath = join(__dirname, 'stock_management.db');
+// DB_PATH lets one codebase serve many isolated client instances (one DB each),
+// e.g. a subdomain per client. Defaults to the local file for single installs.
+const dbPath = process.env.DB_PATH || join(__dirname, 'stock_management.db');
 
 // Keep a single database connection open instead of opening/closing for each query
 // This is much more efficient and faster

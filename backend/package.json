@@ -21,6 +21,7 @@
     "reset-stock": "node database/clearStock.js",
     "reset-all": "node database/resetAll.js",
     "reset-client": "node database/resetClient.js",
+    "provision-client": "node database/provisionClient.js",
     "backup": "node database/backup.js",
     "backup:weekly": "node database/backup.js weekly",
     "backup:list": "node database/backup.js list",
