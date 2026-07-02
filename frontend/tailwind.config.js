@@ -18,13 +18,14 @@ export default {
           300: '#8d96ba',
           400: '#6773a3',
           500: '#41508c',
-          600: '#2d3a6e',
-          700: '#1B2A5E',
-          800: '#15214b',
+          // 600/700/800 are the brand shades — themed from company settings
+          600: 'rgb(var(--brand-primary-light) / <alpha-value>)',
+          700: 'rgb(var(--brand-primary) / <alpha-value>)',
+          800: 'rgb(var(--brand-primary-dark) / <alpha-value>)',
           900: '#0f1838',
         },
         brand: {
-          orange: '#E87A2E',
+          orange: 'rgb(var(--brand-accent) / <alpha-value>)',
           'orange-dark': '#C44E2A',
           'orange-light': '#F5A623',
           cream: '#F0EBE3',

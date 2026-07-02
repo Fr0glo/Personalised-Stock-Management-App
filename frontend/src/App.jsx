@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import ThemeProvider from './components/ThemeProvider';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Stock from './pages/Stock';
@@ -36,6 +37,7 @@ function App() {
   }
 
   return (
+    <ThemeProvider>
     <Router>
       <Routes>
         {/* Login page - public */}
@@ -99,6 +101,7 @@ function App() {
         />
       </Routes>
     </Router>
+    </ThemeProvider>
   );
 }
 

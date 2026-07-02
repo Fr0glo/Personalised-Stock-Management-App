@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Brand colours — overridden at runtime from company settings (space-separated RGB) */
+:root {
+  --brand-primary: 27 42 94;        /* navy-700 */
+  --brand-primary-light: 45 58 110; /* navy-600 */
+  --brand-primary-dark: 21 33 75;   /* navy-800 */
+  --brand-accent: 232 122 46;       /* brand-orange */
+}
+
 body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',

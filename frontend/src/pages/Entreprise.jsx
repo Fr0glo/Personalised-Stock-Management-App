@@ -57,6 +57,8 @@ const Entreprise = () => {
       });
       if (!res.ok) throw new Error('Échec');
       setSavedAt(Date.now());
+      // Reload so the new logo, name and colours apply everywhere.
+      setTimeout(() => window.location.reload(), 400);
     } catch (err) {
       alert(`Erreur lors de l'enregistrement: ${err.message}`);
     } finally {
