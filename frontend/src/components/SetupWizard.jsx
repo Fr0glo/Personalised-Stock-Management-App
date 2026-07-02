@@ -76,7 +76,7 @@ const SetupWizard = () => {
 
         <div className="p-6 space-y-5">
           <div className="flex gap-4 items-center">
-            <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden bg-slate-50 flex-shrink-0">
+            <div className="w-24 h-24 rounded-xl border border-slate-200 flex items-center justify-center overflow-hidden bg-white p-2 flex-shrink-0">
               {form.logo ? <img src={form.logo} alt="Logo" className="max-w-full max-h-full object-contain" /> : <ImageIcon className="h-8 w-8 text-slate-300" />}
             </div>
             <div>

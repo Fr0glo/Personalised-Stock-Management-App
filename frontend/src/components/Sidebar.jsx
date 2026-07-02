@@ -79,7 +79,7 @@ const Sidebar = () => {
       <div className="p-6 border-b border-navy-600">
         <div className="flex items-center space-x-3">
           {company?.logo
-            ? <img src={company.logo} alt="Logo" className="w-14 h-14 object-contain" />
+            ? <div className="w-14 h-14 rounded-lg bg-white p-1.5 flex items-center justify-center flex-shrink-0"><img src={company.logo} alt="Logo" className="max-w-full max-h-full object-contain" /></div>
             : <div className="w-14 h-14 rounded-lg bg-navy-600 flex items-center justify-center"><Building2 className="w-7 h-7 text-navy-200" /></div>}
           <div>
             <h1 className="text-lg font-display font-bold text-white tracking-wide truncate max-w-[150px]">

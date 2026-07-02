@@ -55,7 +55,7 @@ const Login = () => {
         {/* Logo/Header */}
         <div className="text-center mb-8">
           {company?.logo
-            ? <img src={company.logo} alt="Logo" className="w-24 h-24 object-contain mx-auto mb-4" />
+            ? <div className="w-24 h-24 rounded-xl bg-white border border-slate-100 shadow-sm p-2.5 flex items-center justify-center mx-auto mb-4"><img src={company.logo} alt="Logo" className="max-w-full max-h-full object-contain" /></div>
             : <div className="w-24 h-24 rounded-xl bg-navy-50 flex items-center justify-center mx-auto mb-4"><Building2 className="w-12 h-12 text-navy-300" /></div>}
           <h1 className="text-2xl font-bold text-navy-700">{company?.company_name || 'Gestion de Stock'}</h1>
           {company?.tagline && <p className="text-xs text-navy-400 tracking-widest uppercase mt-1">{company.tagline}</p>}

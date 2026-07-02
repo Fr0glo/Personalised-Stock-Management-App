@@ -107,7 +107,7 @@ const Entreprise = () => {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Logo &amp; couleurs</h2>
           <div className="flex flex-col items-center">
-            <div className="w-40 h-40 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden bg-slate-50 mb-3">
+            <div className="w-40 h-40 rounded-xl border border-slate-200 flex items-center justify-center overflow-hidden bg-white p-2 mb-3">
               {form.logo
                 ? <img src={form.logo} alt="Logo" className="max-w-full max-h-full object-contain" />
                 : <ImageIcon className="h-10 w-10 text-slate-300" />}
