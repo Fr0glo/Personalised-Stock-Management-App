@@ -1,26 +1,15 @@
-# Caddyfile — stockmanagement.app  (subdomain-per-client hosting)
-#
-# Caddy automatically obtains + renews HTTPS certificates for the main domain
-# and every client subdomain listed here. Add one block per client (the
-# `provision-client` script prints the exact block), then run:  caddy reload
-#
-# DNS: a wildcard  *.stockmanagement.app  A-record must point at this server,
-# plus  stockmanagement.app  itself, so every subdomain resolves here.
-#
-# NOTE: .app is HTTPS-only (HSTS preload). Caddy's auto-HTTPS covers this — there
-# is nothing extra to configure; plain http:// simply isn't offered.
+# Caddyfile for stockmanagement.app (subdomain per client).
+# Each block routes a hostname to that client's local port.
+# Add one block per client, then reload: sudo systemctl reload caddy
 
-# --- Main domain: landing page / demo instance ---
 stockmanagement.app, www.stockmanagement.app {
     reverse_proxy localhost:4000
 }
 
-# --- One block per client (each = its own instance + database) ---
-# provision-client prints the exact block. Example:
-# beta.stockmanagement.app {
-#     reverse_proxy localhost:4001
-# }
+x.stockmanagement.app {
+    reverse_proxy localhost:4001
+}
 
-# acme.stockmanagement.app {
-#     reverse_proxy localhost:4002
-# }
+w.stockmanagement.app {
+    reverse_proxy localhost:4002
+}
