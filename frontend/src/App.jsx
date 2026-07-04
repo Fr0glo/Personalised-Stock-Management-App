@@ -16,6 +16,8 @@ import Comptes from './pages/Comptes';
 import Security from './pages/Security';
 import BonEntree from './pages/BonEntree';
 import BonSortie from './pages/BonSortie';
+import ModeChooser from './pages/ModeChooser';
+import Monitoring from './pages/Monitoring';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -41,7 +43,11 @@ function App() {
       <Routes>
         {/* Login page - public */}
         <Route path="/login" element={<Login />} />
-        
+
+        {/* Owner console (port-4000 instance): mode chooser + monitoring dashboard */}
+        <Route path="/console" element={<ProtectedRoute><ModeChooser /></ProtectedRoute>} />
+        <Route path="/monitoring" element={<ProtectedRoute><Monitoring /></ProtectedRoute>} />
+
         {/* Security page - protected, security role only */}
         <Route 
           path="/security" 

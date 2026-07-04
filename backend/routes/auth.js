@@ -68,6 +68,12 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
+    // On the owner console (port 4000, OWNER_CONSOLE=1) only the owner/admin
+    // logins are allowed — no depot/security/office accounts here.
+    if (process.env.OWNER_CONSOLE === '1' && !['owner', 'superadmin'].includes(user.role)) {
+      return res.status(403).json({ error: 'Accès réservé à l\'administration.' });
+    }
+
     // Return user info (without password)
     const { password: _, ...userWithoutPassword } = user;
     res.json({

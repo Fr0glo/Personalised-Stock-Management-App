@@ -22,6 +22,7 @@ import analyticsRoutes from './routes/analytics.js';
 import settingsRoutes from './routes/settings.js';
 import bonCommandeRoutes from './routes/bonCommande.js';
 import companyRoutes from './routes/company.js';
+import monitoringRoutes from './routes/monitoring.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -62,6 +63,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/bon-commande', bonCommandeRoutes);
 app.use('/api/company', companyRoutes);
+app.use('/api/monitoring', monitoringRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, User, Lock, Building2 } from 'lucide-react';
 import { useCompany } from '../hooks/useCompany';
+import { monitoringStatus } from '../utils/monitoring';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -31,7 +32,11 @@ const Login = () => {
         localStorage.setItem('user', JSON.stringify(data.user));
         localStorage.setItem('isAuthenticated', 'true');
 
-        if (data.user.role === 'security') {
+        // On the owner console instance, send owner/admin to the Testing/Monitoring chooser.
+        const { enabled } = await monitoringStatus();
+        if (enabled && (data.user.role === 'owner' || data.user.role === 'superadmin')) {
+          navigate('/console');
+        } else if (data.user.role === 'security') {
           navigate('/security');
         } else if (data.user.role === 'superadmin' || data.user.role === 'owner') {
           navigate('/analyse');
