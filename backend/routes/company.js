@@ -1,5 +1,5 @@
 import express from 'express';
-import { getRow, runQuery } from '../database/connection.js';
+import { getRow, runQuery, getAll } from '../database/connection.js';
 
 const router = express.Router();
 
@@ -18,6 +18,15 @@ const DEFAULTS = {
   color_accent: '#F1581A',
   bon_template: 'classic',
   setup_done: 0,
+  features: {},
+};
+
+// features is stored as a JSON string; expose it to callers as an object.
+const withParsedFeatures = (row) => {
+  if (!row) return row;
+  let features = {};
+  try { features = JSON.parse(row.features || '{}'); } catch { features = {}; }
+  return { ...row, features };
 };
 
 const ensureTable = async () => {
@@ -35,9 +44,15 @@ const ensureTable = async () => {
       color_primary TEXT DEFAULT '#14246B',
       color_accent TEXT DEFAULT '#F1581A',
       bon_template TEXT DEFAULT 'classic',
-      setup_done INTEGER DEFAULT 0
+      setup_done INTEGER DEFAULT 0,
+      features TEXT DEFAULT '{}'
     )
   `);
+  // Older installs may predate the features column — add it if missing.
+  const cols = await getAll('PRAGMA table_info(companySettings)');
+  if (!cols.some((c) => c.name === 'features')) {
+    await runQuery("ALTER TABLE companySettings ADD COLUMN features TEXT DEFAULT '{}'");
+  }
   const row = await getRow('SELECT id FROM companySettings WHERE id = 1');
   if (!row) {
     await runQuery('INSERT INTO companySettings (id) VALUES (1)');
@@ -50,7 +65,7 @@ router.get('/', async (req, res) => {
   try {
     await ensureTable();
     const row = await getRow('SELECT * FROM companySettings WHERE id = 1');
-    res.json(row || { id: 1, ...DEFAULTS });
+    res.json(row ? withParsedFeatures(row) : { id: 1, ...DEFAULTS });
   } catch (error) {
     console.error('Error fetching company settings:', error);
     res.status(500).json({ error: 'Failed to fetch company settings' });
@@ -79,7 +94,7 @@ router.put('/', async (req, res) => {
     }
 
     const row = await getRow('SELECT * FROM companySettings WHERE id = 1');
-    res.json(row);
+    res.json(withParsedFeatures(row));
   } catch (error) {
     console.error('Error updating company settings:', error);
     res.status(500).json({ error: 'Failed to update company settings' });

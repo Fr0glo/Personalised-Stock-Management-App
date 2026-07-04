@@ -16,6 +16,7 @@ const DEFAULTS = {
   color_primary: '#14246B',
   color_accent: '#F1581A',
   bon_template: 'classic',
+  features: {},
 };
 
 export const getCompany = async () => {
@@ -35,4 +36,13 @@ export const useCompany = () => {
   const [company, setCompany] = useState(cache || DEFAULTS);
   useEffect(() => { getCompany().then(setCompany); }, []);
   return company;
+};
+
+// Per-client feature flags (enabled by the owner server-side). Gate optional/
+// paid UI with one line, e.g.  const facture = useFeature('facture');
+export const hasFeature = (company, name) => !!(company && company.features && company.features[name]);
+
+export const useFeature = (name) => {
+  const company = useCompany();
+  return hasFeature(company, name);
 };

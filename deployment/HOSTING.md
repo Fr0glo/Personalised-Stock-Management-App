@@ -61,9 +61,22 @@ pm2 save
 Then add the printed block to the `Caddyfile` and `caddy reload`. Pick the next
 free port (4001, 4002, 4003, …) for each new client.
 
-The client opens `https://acme.votre-domaine.com`, logs in as **admin / admin123**,
+The client opens `https://acme.stockmanagement.app`, logs in as **admin / admin123**,
 and the setup wizard walks them through their logo, colours and name. You set
 their account limit from your **super admin** login.
+
+## Enable a paid / optional feature for one client
+
+Optional features (e.g. `facture`) ship in the shared code but are **off by
+default**. You turn one on for a specific client server-side once they've paid —
+the client cannot enable it themselves from the app. From `backend/`:
+```bash
+npm run set-feature acme facture on     # enable
+npm run set-feature acme facture off    # disable
+```
+It flips the flag in that client's own database (`companySettings.features`).
+The client sees the change after a full page refresh. Same code for everyone;
+only that client's database differs.
 
 ## Update every client at once
 
