@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FlaskConical, BarChart3, LogOut } from 'lucide-react';
 import { monitoringStatus } from '../utils/monitoring';
+import SolutionatyLogo from '../components/SolutionatyLogo';
 
 // Shown right after the owner logs in on the port-4000 console: pick a space.
 const ModeChooser = () => {
@@ -15,8 +16,8 @@ const ModeChooser = () => {
   return (
     <div className="min-h-screen bg-brand-cream flex flex-col items-center justify-center p-4">
       <div className="text-center mb-10">
-        <h1 className="text-3xl font-bold text-navy-700">Monitoring Gestion de Stock</h1>
-        <p className="text-slate-500 mt-2">Choisissez un espace</p>
+        <SolutionatyLogo className="h-20 w-auto mx-auto" />
+        <p className="text-slate-500 mt-4">Espace de gestion — choisissez un mode</p>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 w-full max-w-2xl">

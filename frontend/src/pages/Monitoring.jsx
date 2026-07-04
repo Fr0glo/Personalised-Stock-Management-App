@@ -5,6 +5,7 @@ import {
   fetchClients, toggleClientFeature,
   getMonitorKey, setMonitorKey, verifyMonitorKey, monitoringStatus,
 } from '../utils/monitoring';
+import SolutionatyLogo from '../components/SolutionatyLogo';
 
 // The optional/paid features you can turn on per client.
 const KNOWN_FEATURES = [
@@ -70,7 +71,9 @@ const Monitoring = () => {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate('/console')} className="text-slate-500 hover:text-navy-700"><ArrowLeft className="w-5 h-5" /></button>
-            <h1 className="text-2xl font-bold text-navy-700">Monitoring <span className="text-slate-400 font-normal">— Gestion de Stock</span></h1>
+            <SolutionatyLogo className="h-9 w-auto" showTagline={false} />
+            <span className="text-slate-300 text-xl font-light">/</span>
+            <h1 className="text-xl font-semibold text-navy-700">Monitoring</h1>
           </div>
           <button onClick={load} className="flex items-center gap-2 text-sm text-navy-700 hover:text-navy-900">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Actualiser

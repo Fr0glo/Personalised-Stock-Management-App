@@ -1,16 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, User, Lock, Building2 } from 'lucide-react';
 import { useCompany } from '../hooks/useCompany';
 import { monitoringStatus } from '../utils/monitoring';
+import SolutionatyLogo from '../components/SolutionatyLogo';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isConsole, setIsConsole] = useState(false);
   const navigate = useNavigate();
   const company = useCompany();
+
+  // On the owner console instance, brand the login with the Solutionaty logo.
+  useEffect(() => { monitoringStatus().then((s) => setIsConsole(s.enabled)); }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -59,11 +64,17 @@ const Login = () => {
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md border border-brand-cream-dark">
         {/* Logo/Header */}
         <div className="text-center mb-8">
-          {company?.logo
-            ? <div className="w-24 h-24 rounded-xl bg-white border border-slate-100 shadow-sm p-2.5 flex items-center justify-center mx-auto mb-4"><img src={company.logo} alt="Logo" className="max-w-full max-h-full object-contain" /></div>
-            : <div className="w-24 h-24 rounded-xl bg-navy-50 flex items-center justify-center mx-auto mb-4"><Building2 className="w-12 h-12 text-navy-300" /></div>}
-          <h1 className="text-2xl font-bold text-navy-700">{company?.company_name || 'Gestion de Stock'}</h1>
-          {company?.tagline && <p className="text-xs text-navy-400 tracking-widest uppercase mt-1">{company.tagline}</p>}
+          {isConsole ? (
+            <SolutionatyLogo className="h-16 w-auto mx-auto mb-3" />
+          ) : (
+            <>
+              {company?.logo
+                ? <div className="w-24 h-24 rounded-xl bg-white border border-slate-100 shadow-sm p-2.5 flex items-center justify-center mx-auto mb-4"><img src={company.logo} alt="Logo" className="max-w-full max-h-full object-contain" /></div>
+                : <div className="w-24 h-24 rounded-xl bg-navy-50 flex items-center justify-center mx-auto mb-4"><Building2 className="w-12 h-12 text-navy-300" /></div>}
+              <h1 className="text-2xl font-bold text-navy-700">{company?.company_name || 'Gestion de Stock'}</h1>
+              {company?.tagline && <p className="text-xs text-navy-400 tracking-widest uppercase mt-1">{company.tagline}</p>}
+            </>
+          )}
           <p className="text-slate-500 mt-3">Connexion au système</p>
         </div>
 
